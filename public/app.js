@@ -63,7 +63,9 @@ async function fetchPage(cursor = null) {
   if (state.apiKey)         p.set('apiKey', state.apiKey);
   if (state.nsfw)           p.set('nsfw', 'true');
 
-  const res = await fetch(`/api/images?${p}`);
+  const url = `/api/images?${p}`;
+  console.debug('[fetchPage] GET', url);
+  const res = await fetch(url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `HTTP ${res.status}`);
@@ -221,6 +223,11 @@ async function loadImages(append = false) {
 
     const data     = await fetchPage(cursor);
 
+    // DEBUG — open browser console to see this
+    const meta = data.metadata || {};
+    console.debug('[loadImages] sort:', state.sort, '| append:', append, '| items received:', (data.items||[]).length,
+      '| metadata:', JSON.stringify(meta), '| data.nextCursor:', data.nextCursor);
+
     // Discard result if a newer load has already taken over
     if (state._loadGen !== myGen) return;
 
@@ -228,8 +235,19 @@ async function loadImages(append = false) {
     const offset   = state.items.length;
 
     state.items  = [...state.items, ...newItems];
-    state.cursor  = data.metadata?.nextCursor ?? null;
-    state.hasMore = state.cursor !== null && state.cursor !== undefined;
+
+    // Extract cursor robustly: nextCursor in metadata, top-level, or parsed from nextPage URL
+    let nextCursor = meta.nextCursor ?? data.nextCursor ?? null;
+    if ((nextCursor === null || nextCursor === undefined) && meta.nextPage) {
+      try {
+        const pageUrl = new URL(meta.nextPage);
+        const c = pageUrl.searchParams.get('cursor');
+        if (c !== null && c !== '') nextCursor = c;
+      } catch {}
+    }
+    state.cursor  = nextCursor ?? null;
+    state.hasMore = state.cursor !== null && state.cursor !== undefined && state.cursor !== '';
+    console.debug('[loadImages] → cursor:', state.cursor, '| hasMore:', state.hasMore);
 
     appendCards(newItems, offset);
     updateControlBar();

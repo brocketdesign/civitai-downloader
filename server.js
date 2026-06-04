@@ -60,10 +60,12 @@ app.get('/api/images', async (req, res) => {
       sort: sort || 'Newest',
     });
     if (type && type !== 'all') params.set('type', type);
-    if (cursor) params.set('cursor', cursor);
+    if (cursor != null && cursor !== '') params.set('cursor', cursor);
     if (nsfw === 'true') params.set('nsfw', 'true');
 
     const data = await civitaiFetch(`/images?${params}`, apiKey);
+    const meta = data.metadata || {};
+    console.log('[civitai] sort:', sort, '| cursor in:', cursor || '(none)', '| items:', (data.items||[]).length, '| nextCursor:', meta.nextCursor, '| nextPage:', meta.nextPage ? meta.nextPage.slice(0, 80) : null);
     res.json(data);
   } catch (err) {
     console.error('[GET /api/images]', err.message);
