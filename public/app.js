@@ -59,7 +59,7 @@ async function fetchPage(cursor = null) {
     limit:    100,
   });
   if (state.type !== 'all') p.set('type', state.type);
-  if (cursor)               p.set('cursor', cursor);
+  if (cursor != null)       p.set('cursor', cursor);
   if (state.apiKey)         p.set('apiKey', state.apiKey);
   if (state.nsfw)           p.set('nsfw', 'true');
 
@@ -228,8 +228,8 @@ async function loadImages(append = false) {
     const offset   = state.items.length;
 
     state.items  = [...state.items, ...newItems];
-    state.cursor = data.metadata?.nextCursor || null;
-    state.hasMore = Boolean(state.cursor);
+    state.cursor  = data.metadata?.nextCursor ?? null;
+    state.hasMore = state.cursor !== null && state.cursor !== undefined;
 
     appendCards(newItems, offset);
     updateControlBar();
