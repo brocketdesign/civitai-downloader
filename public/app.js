@@ -3,6 +3,7 @@ const state = {
   username:       '',
   apiKey:         localStorage.getItem('civitai_api_key') || '',
   nsfw:           localStorage.getItem('civitai_nsfw') === 'true',
+  speedLimit:     parseFloat(localStorage.getItem('civitai_speed_limit')) || 0, // MB/s, 0 = unlimited
   items:          [],
   selected:       new Set(),
   lastClickedIndex: -1,   // for shift-click range selection
@@ -302,11 +303,15 @@ async function downloadZip() {
   setDownloadStatus(`⏳ Fetching & zipping ${toDownload.length} files… this may take a while.`);
   document.getElementById('downloadZipBtn').disabled = true;
 
+  const speedLimitBytes = state.speedLimit > 0
+    ? Math.round(state.speedLimit * 1024 * 1024)
+    : 0;
+
   try {
     const res = await fetch('/api/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: toDownload, apiKey: state.apiKey }),
+      body: JSON.stringify({ items: toDownload, apiKey: state.apiKey, speedLimit: speedLimitBytes }),
     });
 
     if (!res.ok) {
@@ -516,6 +521,15 @@ function init() {
   apiKeyInput.value = state.apiKey;
   const nsfwCheck = document.getElementById('nsfwCheck');
   nsfwCheck.checked = state.nsfw;
+
+  // Restore saved speed limit
+  const speedLimitInput = document.getElementById('speedLimitInput');
+  if (state.speedLimit > 0) speedLimitInput.value = state.speedLimit;
+  speedLimitInput.addEventListener('change', (e) => {
+    const val = parseFloat(e.target.value);
+    state.speedLimit = (val > 0) ? val : 0;
+    localStorage.setItem('civitai_speed_limit', state.speedLimit);
+  });
 
   // Render history chips
   renderHistory();

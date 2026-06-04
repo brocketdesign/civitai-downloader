@@ -68,6 +68,11 @@
     <span id="selectedCount" class="selected-count">0 selected</span>
   </div>
   <div class="controls-right">
+    <div class="speed-limit-wrap" title="Max download speed (0 or empty = unlimited)">
+      <span class="speed-label">🚀</span>
+      <input type="number" id="speedLimitInput" class="speed-input" min="0" step="0.5" placeholder="∞" />
+      <span class="speed-unit">MB/s</span>
+    </div>
     <button id="downloadZipBtn" class="btn btn-primary" disabled>⬇ Download ZIP</button>
     <button id="copyUrlsBtn" class="btn btn-sm" disabled>📋 Copy URLs</button>
     <button id="downloadListBtn" class="btn btn-sm" disabled>📄 Save URL List</button>

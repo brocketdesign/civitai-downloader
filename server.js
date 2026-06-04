@@ -73,6 +73,29 @@ app.get('/api/images', async (req, res) => {
   }
 });
 
+// ---- Token-bucket throttle ----
+
+class TokenBucket {
+  constructor(bytesPerSec) {
+    this.rate      = bytesPerSec; // 0 = unlimited
+    this.tokens    = bytesPerSec;
+    this.lastFill  = Date.now();
+  }
+
+  async consume(bytes) {
+    if (!this.rate) return;
+    while (true) {
+      const now     = Date.now();
+      const elapsed = (now - this.lastFill) / 1000;
+      this.tokens   = Math.min(this.rate, this.tokens + elapsed * this.rate);
+      this.lastFill = now;
+      if (this.tokens >= bytes) { this.tokens -= bytes; return; }
+      const waitMs = Math.ceil(((bytes - this.tokens) / this.rate) * 1000);
+      await sleep(Math.max(1, waitMs));
+    }
+  }
+}
+
 // ---- Concurrent download helper ----
 
 async function downloadWithConcurrency(items, concurrency, onEach) {
@@ -97,7 +120,7 @@ async function downloadWithConcurrency(items, concurrency, onEach) {
 
 // POST /api/download — bulk zip download
 app.post('/api/download', async (req, res) => {
-  const { items, apiKey } = req.body;
+  const { items, apiKey, speedLimit } = req.body; // speedLimit in bytes/sec, 0 = unlimited
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items array is required' });
@@ -119,6 +142,10 @@ app.post('/api/download', async (req, res) => {
   archive.pipe(res);
 
   const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  const bucket  = new TokenBucket(speedLimit > 0 ? speedLimit : 0);
+  if (speedLimit > 0) {
+    console.log(`[download] Speed limit: ${(speedLimit / 1024 / 1024).toFixed(2)} MB/s`);
+  }
 
   await downloadWithConcurrency(items, 5, async (item) => {
     const r = await fetch(item.url, { headers });
@@ -126,7 +153,17 @@ app.post('/api/download', async (req, res) => {
       console.warn(`  ✗ ${item.filename}: HTTP ${r.status}`);
       return;
     }
-    const buffer = Buffer.from(await r.arrayBuffer());
+
+    // Stream with optional throttle
+    const chunks = [];
+    const reader = r.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await bucket.consume(value.length);
+      chunks.push(Buffer.from(value));
+    }
+    const buffer = Buffer.concat(chunks);
     archive.append(buffer, { name: item.filename });
     console.log(`  ✓ ${item.filename} (${Math.round(buffer.length / 1024)}KB)`);
   });

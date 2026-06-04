@@ -146,6 +146,34 @@ body {
 
 .muted-text { color: var(--muted); font-size: 12px; }
 
+/* ---- Speed limit ---- */
+.speed-limit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.speed-label { font-size: 13px; }
+.speed-input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  width: 52px;
+  font-size: 13px;
+  outline: none;
+  text-align: right;
+}
+.speed-input::placeholder { color: var(--muted); }
+/* hide browser number spinners */
+.speed-input::-webkit-inner-spin-button,
+.speed-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.speed-input[type=number] { -moz-appearance: textfield; }
+.speed-unit { color: var(--muted); white-space: nowrap; }
+
 /* ---- NSFW toggle ---- */
 .nsfw-toggle {
   display: flex;
