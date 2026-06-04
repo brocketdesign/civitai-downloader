@@ -14,6 +14,9 @@ const state = {
   lightboxIndex:  -1,
   type:           'all',
   sort:           'Newest',
+  currentPage:    1,
+  totalPages:     null,
+  totalItems:     null,
 };
 
 /* ---- Utilities ---- */
@@ -53,14 +56,15 @@ function fmtStats({ heartCount = 0, likeCount = 0, commentCount = 0 } = {}) {
 
 /* ---- API ---- */
 
-async function fetchPage(cursor = null) {
+async function fetchPage(cursor = null, page = null) {
   const p = new URLSearchParams({
     username: state.username,
     sort:     state.sort,
     limit:    100,
   });
   if (state.type !== 'all') p.set('type', state.type);
-  if (cursor != null)       p.set('cursor', cursor);
+  if (page != null)         p.set('page', page);
+  else if (cursor != null)  p.set('cursor', cursor);
   if (state.apiKey)         p.set('apiKey', state.apiKey);
   if (state.nsfw)           p.set('nsfw', 'true');
 
@@ -194,7 +198,7 @@ function syncSelectionUI() {
 
 /* ---- Load ---- */
 
-async function loadImages(append = false) {
+async function loadImages(append = false, startPage = null) {
   let myGen;
 
   if (!append) {
@@ -215,18 +219,23 @@ async function loadImages(append = false) {
 
   try {
     const cursor = append ? state.cursor : null;
+    const page   = append ? null : startPage;
+
     if (!append) {
       state.items = [];
       state.selected.clear();
       state.lastClickedIndex = -1;
+      state.currentPage = startPage || 1;
+      state.totalPages  = null;
+      state.totalItems  = null;
       document.getElementById('gallery').innerHTML = '';
     }
 
-    const data     = await fetchPage(cursor);
+    const data     = await fetchPage(cursor, page);
 
     // DEBUG — open browser console to see this
     const meta = data.metadata || {};
-    console.debug('[loadImages] sort:', state.sort, '| append:', append, '| items received:', (data.items||[]).length,
+    console.debug('[loadImages] sort:', state.sort, '| append:', append, '| page:', page, '| items received:', (data.items||[]).length,
       '| metadata:', JSON.stringify(meta), '| data.nextCursor:', data.nextCursor);
 
     // Discard result if a newer load has already taken over
@@ -236,6 +245,18 @@ async function loadImages(append = false) {
     const offset   = state.items.length;
 
     state.items  = [...state.items, ...newItems];
+
+    // Update pagination metadata from API response
+    if (meta.totalPages  != null) state.totalPages  = meta.totalPages;
+    if (meta.totalItems  != null) state.totalItems  = meta.totalItems;
+    if (meta.currentPage != null) state.currentPage = meta.currentPage;
+    else if (append)              state.currentPage = (state.currentPage || 1) + 1;
+
+    // Update page jump max when total is known
+    if (state.totalPages) {
+      const jumpInput = document.getElementById('pageJumpInput');
+      if (jumpInput) jumpInput.max = state.totalPages;
+    }
 
     // Extract cursor robustly: nextCursor in metadata, top-level, or parsed from nextPage URL
     let nextCursor = meta.nextCursor ?? data.nextCursor ?? null;
@@ -269,7 +290,8 @@ async function loadAll() {
 
   let consecutiveErrors = 0;
   while (state.hasMore) {
-    progress.textContent = `Loading… (${state.items.length} loaded)`;
+    const pageOf = state.totalPages ? `/${state.totalPages}` : '';
+    progress.textContent = `Loading… page ${state.currentPage}${pageOf} (${state.items.length} loaded)`;
     await sleep(400);
     try {
       await loadImages(true);
@@ -285,7 +307,8 @@ async function loadAll() {
     }
   }
 
-  progress.textContent = `✓ ${state.items.length} items loaded`;
+  const totalLabel = state.totalItems ? ` of ${state.totalItems.toLocaleString()}` : '';
+  progress.textContent = `✓ ${state.items.length}${totalLabel} items loaded`;
   setTimeout(() => { progress.textContent = ''; }, 4000);
 }
 
@@ -501,7 +524,28 @@ function updateControlBar() {
   document.getElementById('filters').style.display = 'flex';
   document.getElementById('loadMoreContainer').style.display = state.hasMore ? 'flex' : 'none';
   document.getElementById('itemCount').textContent = `${state.items.length} loaded`;
+  updatePageInfo();
   renderHistory(); // refresh active chip highlight
+}
+
+function updatePageInfo() {
+  const el = document.getElementById('pageInfo');
+  if (!el) return;
+  const parts = [];
+  if (state.totalPages) {
+    parts.push(`Page ${state.currentPage} of ${state.totalPages}`);
+  } else if (state.currentPage > 1) {
+    parts.push(`Page ${state.currentPage}`);
+  }
+  if (state.totalItems != null) {
+    parts.push(`${state.totalItems.toLocaleString()} total items`);
+  }
+  el.textContent = parts.join(' · ');
+}
+
+async function jumpToPage(pageNum) {
+  if (!pageNum || pageNum < 1 || !state.username) return;
+  await loadImages(false, pageNum);
 }
 
 /* ---- Init ---- */
@@ -595,6 +639,17 @@ function init() {
   // Pagination
   document.getElementById('loadMoreBtn').addEventListener('click', () => loadImages(true));
   document.getElementById('loadAllBtn').addEventListener('click', loadAll);
+
+  // Page jump
+  const pageJumpBtn   = document.getElementById('pageJumpBtn');
+  const pageJumpInput = document.getElementById('pageJumpInput');
+  pageJumpBtn.addEventListener('click', () => {
+    const p = parseInt(pageJumpInput.value, 10);
+    if (p > 0 && state.username) jumpToPage(p);
+  });
+  pageJumpInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') pageJumpBtn.click();
+  });
 
   // Lightbox controls
   document.getElementById('lightboxClose').addEventListener('click', closeLightbox);

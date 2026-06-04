@@ -42,6 +42,11 @@
     </select>
     <button id="loadAllBtn" class="btn btn-sm">Load All Pages</button>
     <span id="loadAllProgress" class="muted-text"></span>
+    <span id="pageInfo" class="muted-text page-info"></span>
+    <div class="page-jump-wrap">
+      <input type="number" id="pageJumpInput" class="page-jump-input" min="1" placeholder="Page #" title="Jump to page" />
+      <button id="pageJumpBtn" class="btn btn-sm">↪ Go</button>
+    </div>
 
     <label class="nsfw-toggle" title="Requires API key for explicit content">
       <input type="checkbox" id="nsfwCheck" />

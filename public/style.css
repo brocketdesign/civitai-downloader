@@ -381,6 +381,35 @@ body {
   padding: 24px;
 }
 
+/* ---- Page jump ---- */
+.page-info {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.page-jump-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-jump-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+  width: 80px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+.page-jump-input:focus { border-color: var(--accent); }
+.page-jump-input::-webkit-inner-spin-button,
+.page-jump-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.page-jump-input[type=number] { -moz-appearance: textfield; }
+
 /* ---- Lightbox ---- */
 .lightbox {
   position: fixed;
