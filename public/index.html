@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Civit.ai Downloader</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="header">
+  <div class="header-top">
+    <h1>🖼 Civit.ai Downloader</h1>
+    <div class="search-row">
+      <input
+        type="text"
+        id="urlInput"
+        placeholder="Paste Civit.ai user URL or username (e.g. https://civitai.com/user/someone/images)"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="loadBtn" class="btn btn-primary">Load</button>
+    </div>
+    <div id="historyBar" class="history-bar" style="display:none">
+      <span class="history-label">Recent:</span>
+      <div id="historyList" class="history-list"></div>
+    </div>
+  </div>
+
+  <div id="filters" class="filters" style="display:none">
+    <select id="typeFilter" class="select">
+      <option value="all">All Types</option>
+      <option value="image">Images Only</option>
+      <option value="video">Videos Only</option>
+    </select>
+    <select id="sortFilter" class="select">
+      <option value="Newest">Newest</option>
+      <option value="Most Reactions">Most Reactions</option>
+      <option value="Most Comments">Most Comments</option>
+      <option value="Most Collected">Most Collected</option>
+      <option value="Oldest">Oldest</option>
+    </select>
+    <button id="loadAllBtn" class="btn btn-sm">Load All Pages</button>
+    <span id="loadAllProgress" class="muted-text"></span>
+
+    <label class="nsfw-toggle" title="Requires API key for explicit content">
+      <input type="checkbox" id="nsfwCheck" />
+      <span>🔞 NSFW</span>
+    </label>
+
+    <div class="api-key-row">
+      <input
+        type="password"
+        id="apiKeyInput"
+        placeholder="API Key (optional, for NSFW)"
+        class="api-key-input"
+        autocomplete="off"
+      />
+    </div>
+  </div>
+</header>
+
+<div id="controls" class="controls">
+  <div class="controls-left">
+    <button id="selectAllBtn" class="btn btn-sm">Select All</button>
+    <button id="deselectAllBtn" class="btn btn-sm">Deselect All</button>
+    <span id="itemCount" class="muted-text"></span>
+    <span id="selectedCount" class="selected-count">0 selected</span>
+  </div>
+  <div class="controls-right">
+    <button id="downloadZipBtn" class="btn btn-primary" disabled>⬇ Download ZIP</button>
+    <button id="copyUrlsBtn" class="btn btn-sm" disabled>📋 Copy URLs</button>
+    <button id="downloadListBtn" class="btn btn-sm" disabled>📄 Save URL List</button>
+  </div>
+</div>
+
+<div id="downloadStatusBar" class="download-status" style="display:none"></div>
+
+<div id="loadingSpinner" class="spinner" style="display:none">
+  <div class="spinner-ring"></div>
+  <span>Loading…</span>
+</div>
+
+<div id="errorMsg" class="error-msg" style="display:none"></div>
+
+<div id="gallery" class="gallery"></div>
+
+<div id="loadMoreContainer" class="load-more-container" style="display:none">
+  <button id="loadMoreBtn" class="btn btn-outline">Load More</button>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" style="display:none" role="dialog" aria-modal="true">
+  <button id="lightboxClose" class="lb-close" aria-label="Close">✕</button>
+  <button id="lightboxPrev" class="lb-nav lb-prev" aria-label="Previous">‹</button>
+  <button id="lightboxNext" class="lb-nav lb-next" aria-label="Next">›</button>
+  <div class="lb-body">
+    <div id="lightboxContent" class="lb-content"></div>
+    <div id="lightboxInfo" class="lb-info"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

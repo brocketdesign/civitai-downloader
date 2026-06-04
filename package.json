@@ -1,0 +1,17 @@
+{
+  "name": "civitai-downloader",
+  "version": "1.0.0",
+  "description": "Browse and bulk download images/videos from Civit.ai user profiles",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
