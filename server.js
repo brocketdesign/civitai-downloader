@@ -51,7 +51,7 @@ async function civitaiFetch(endpoint, apiKey, retries = 3) {
 // GET /api/images — proxy to Civit.ai images endpoint
 app.get('/api/images', async (req, res) => {
   try {
-    const { username, type, sort, cursor, page, limit = 100, apiKey, nsfw } = req.query;
+    const { username, type, sort, cursor, limit = 100, apiKey, nsfw } = req.query;
     if (!username) return res.status(400).json({ error: 'username is required' });
 
     const params = new URLSearchParams({
@@ -60,13 +60,12 @@ app.get('/api/images', async (req, res) => {
       sort: sort || 'Newest',
     });
     if (type && type !== 'all') params.set('type', type);
-    if (page != null && page !== '') params.set('page', page);
-    else if (cursor != null && cursor !== '') params.set('cursor', cursor);
+    if (cursor != null && cursor !== '') params.set('cursor', cursor);
     if (nsfw === 'true') params.set('nsfw', 'true');
 
     const data = await civitaiFetch(`/images?${params}`, apiKey);
     const meta = data.metadata || {};
-    console.log('[civitai] sort:', sort, '| page:', page || '(cursor)', '| cursor in:', cursor || '(none)', '| items:', (data.items||[]).length, '| nextCursor:', meta.nextCursor, '| totalPages:', meta.totalPages, '| totalItems:', meta.totalItems);
+    console.log('[civitai] sort:', sort, '| cursor in:', cursor || '(none)', '| items:', (data.items||[]).length, '| nextCursor:', meta.nextCursor, '| nextPage:', meta.nextPage ? meta.nextPage.slice(0, 80) : null);
     res.json(data);
   } catch (err) {
     console.error('[GET /api/images]', err.message);

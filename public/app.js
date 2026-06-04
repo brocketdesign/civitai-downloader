@@ -17,6 +17,7 @@ const state = {
   currentPage:    1,
   totalPages:     null,
   totalItems:     null,
+  pageCursors:    { 1: null }, // maps pageNum → starting cursor (cursor-walk cache)
 };
 
 /* ---- Utilities ---- */
@@ -56,17 +57,16 @@ function fmtStats({ heartCount = 0, likeCount = 0, commentCount = 0 } = {}) {
 
 /* ---- API ---- */
 
-async function fetchPage(cursor = null, page = null) {
+async function fetchPage(cursor = null) {
   const p = new URLSearchParams({
     username: state.username,
     sort:     state.sort,
     limit:    100,
   });
   if (state.type !== 'all') p.set('type', state.type);
-  if (page != null)         p.set('page', page);
-  else if (cursor != null)  p.set('cursor', cursor);
-  if (state.apiKey)         p.set('apiKey', state.apiKey);
-  if (state.nsfw)           p.set('nsfw', 'true');
+  if (cursor != null)        p.set('cursor', cursor);
+  if (state.apiKey)          p.set('apiKey', state.apiKey);
+  if (state.nsfw)            p.set('nsfw', 'true');
 
   const url = `/api/images?${p}`;
   console.debug('[fetchPage] GET', url);
@@ -76,6 +76,16 @@ async function fetchPage(cursor = null, page = null) {
     throw new Error(err.error || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+function extractNextCursor(data) {
+  const meta = data.metadata || {};
+  let cursor = meta.nextCursor ?? data.nextCursor ?? null;
+  if (!cursor && meta.nextPage) {
+    try { cursor = new URL(meta.nextPage).searchParams.get('cursor') || null; }
+    catch {}
+  }
+  return cursor || null;
 }
 
 /* ---- Gallery ---- */
@@ -198,7 +208,7 @@ function syncSelectionUI() {
 
 /* ---- Load ---- */
 
-async function loadImages(append = false, startPage = null) {
+async function loadImages(append = false, startCursor = null, pageLabel = null) {
   let myGen;
 
   if (!append) {
@@ -218,25 +228,28 @@ async function loadImages(append = false, startPage = null) {
   hideError();
 
   try {
-    const cursor = append ? state.cursor : null;
-    const page   = append ? null : startPage;
+    const cursor = append ? state.cursor : startCursor;
 
     if (!append) {
       state.items = [];
       state.selected.clear();
       state.lastClickedIndex = -1;
-      state.currentPage = startPage || 1;
-      state.totalPages  = null;
-      state.totalItems  = null;
+      state.currentPage = pageLabel || 1;
+      // Full reset only on true fresh loads (from the beginning, no startCursor)
+      if (startCursor === null) {
+        state.pageCursors = { 1: null };
+        state.totalPages  = null;
+        state.totalItems  = null;
+      }
       document.getElementById('gallery').innerHTML = '';
     }
 
-    const data     = await fetchPage(cursor, page);
+    const data     = await fetchPage(cursor);
 
     // DEBUG — open browser console to see this
     const meta = data.metadata || {};
-    console.debug('[loadImages] sort:', state.sort, '| append:', append, '| page:', page, '| items received:', (data.items||[]).length,
-      '| metadata:', JSON.stringify(meta), '| data.nextCursor:', data.nextCursor);
+    console.debug('[loadImages] sort:', state.sort, '| append:', append, '| cursor:', cursor, '| items received:', (data.items||[]).length,
+      '| metadata:', JSON.stringify(meta));
 
     // Discard result if a newer load has already taken over
     if (state._loadGen !== myGen) return;
@@ -244,13 +257,18 @@ async function loadImages(append = false, startPage = null) {
     const newItems = data.items || [];
     const offset   = state.items.length;
 
-    state.items  = [...state.items, ...newItems];
+    state.items = [...state.items, ...newItems];
 
-    // Update pagination metadata from API response
-    if (meta.totalPages  != null) state.totalPages  = meta.totalPages;
-    if (meta.totalItems  != null) state.totalItems  = meta.totalItems;
-    if (meta.currentPage != null) state.currentPage = meta.currentPage;
-    else if (append)              state.currentPage = (state.currentPage || 1) + 1;
+    // Update totals if the API provides them
+    if (meta.totalPages != null) state.totalPages = meta.totalPages;
+    if (meta.totalItems != null) state.totalItems = meta.totalItems;
+
+    // Increment page counter for appended loads
+    if (append) state.currentPage++;
+
+    // Extract cursor and cache it for the next page
+    const nextCursor = extractNextCursor(data);
+    if (nextCursor) state.pageCursors[state.currentPage + 1] = nextCursor;
 
     // Update page jump max when total is known
     if (state.totalPages) {
@@ -258,18 +276,9 @@ async function loadImages(append = false, startPage = null) {
       if (jumpInput) jumpInput.max = state.totalPages;
     }
 
-    // Extract cursor robustly: nextCursor in metadata, top-level, or parsed from nextPage URL
-    let nextCursor = meta.nextCursor ?? data.nextCursor ?? null;
-    if ((nextCursor === null || nextCursor === undefined) && meta.nextPage) {
-      try {
-        const pageUrl = new URL(meta.nextPage);
-        const c = pageUrl.searchParams.get('cursor');
-        if (c !== null && c !== '') nextCursor = c;
-      } catch {}
-    }
-    state.cursor  = nextCursor ?? null;
-    state.hasMore = state.cursor !== null && state.cursor !== undefined && state.cursor !== '';
-    console.debug('[loadImages] → cursor:', state.cursor, '| hasMore:', state.hasMore);
+    state.cursor  = nextCursor;
+    state.hasMore = Boolean(nextCursor);
+    console.debug('[loadImages] → cursor:', state.cursor, '| hasMore:', state.hasMore, '| currentPage:', state.currentPage);
 
     appendCards(newItems, offset);
     updateControlBar();
@@ -543,9 +552,76 @@ function updatePageInfo() {
   el.textContent = parts.join(' · ');
 }
 
-async function jumpToPage(pageNum) {
-  if (!pageNum || pageNum < 1 || !state.username) return;
-  await loadImages(false, pageNum);
+async function jumpToPage(targetPage) {
+  if (!targetPage || targetPage < 1 || !state.username) return;
+
+  const progressEl = document.getElementById('loadAllProgress');
+
+  // If we already have the cursor cached for this page, jump directly
+  if (state.pageCursors[targetPage] !== undefined) {
+    progressEl.textContent = '';
+    await loadImages(false, state.pageCursors[targetPage], targetPage);
+    return;
+  }
+
+  // Find the best starting point in our cursor cache
+  let fromPage = 1;
+  let walkCursor = null;
+  for (let p = targetPage - 1; p >= 1; p--) {
+    if (state.pageCursors[p] !== undefined) {
+      fromPage = p;
+      walkCursor = state.pageCursors[p];
+      break;
+    }
+  }
+
+  // Acquire the load lock (cancel any in-flight operation)
+  const gen = ++state._loadGen;
+  while (state.loading) await sleep(50);
+  if (state._loadGen !== gen) return;
+
+  state.loading = true;
+  showSpinner(true);
+  hideError();
+  document.getElementById('gallery').innerHTML = '';
+
+  const steps = targetPage - fromPage;
+  let succeeded = false;
+
+  try {
+    for (let step = 0; step < steps; step++) {
+      if (state._loadGen !== gen) return; // superseded
+
+      const curPage = fromPage + step;
+      progressEl.textContent = `Navigating to page ${targetPage}… (${curPage + 1}/${targetPage})`;
+
+      const data = await fetchPage(walkCursor);
+      const nextCursor = extractNextCursor(data);
+
+      if (!nextCursor) {
+        progressEl.textContent = `⚠ Only ${curPage} page(s) exist for this user`;
+        setTimeout(() => { progressEl.textContent = ''; }, 4000);
+        return;
+      }
+
+      walkCursor = nextCursor;
+      state.pageCursors[curPage + 1] = walkCursor; // cache for future jumps
+      await sleep(200); // be polite to the API
+    }
+    succeeded = true;
+  } catch (err) {
+    if (state._loadGen === gen) {
+      progressEl.textContent = `⚠ Navigation failed: ${err.message}`;
+      setTimeout(() => { progressEl.textContent = ''; }, 4000);
+    }
+  } finally {
+    state.loading = false;
+    showSpinner(false);
+  }
+
+  if (!succeeded || state._loadGen !== gen) return;
+  progressEl.textContent = '';
+  await loadImages(false, walkCursor, targetPage);
 }
 
 /* ---- Init ---- */
