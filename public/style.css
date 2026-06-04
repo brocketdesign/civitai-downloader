@@ -179,12 +179,22 @@ body {
 
 /* ---- Spinner ---- */
 .spinner {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
   display: flex;
   align-items: center;
   gap: 12px;
-  justify-content: center;
-  padding: 40px;
+  background: rgba(13, 13, 20, 0.88);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 12px 24px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   color: var(--muted);
+  pointer-events: none;
 }
 
 .spinner-ring {

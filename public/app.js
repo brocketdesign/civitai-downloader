@@ -9,6 +9,7 @@ const state = {
   cursor:         null,
   hasMore:        false,
   loading:        false,
+  _loadGen:       0,      // increments each fresh load; lets new requests supersede stale ones
   lightboxIndex:  -1,
   type:           'all',
   sort:           'Newest',
@@ -191,7 +192,20 @@ function syncSelectionUI() {
 /* ---- Load ---- */
 
 async function loadImages(append = false) {
-  if (state.loading) return;
+  let myGen;
+
+  if (!append) {
+    // Bump generation — any older fresh-load waiting will bail out
+    myGen = ++state._loadGen;
+    // Wait for any in-progress load to finish
+    while (state.loading) await sleep(50);
+    // If a newer request arrived while we were waiting, step aside
+    if (state._loadGen !== myGen) return;
+  } else {
+    if (state.loading) return;
+    myGen = state._loadGen;
+  }
+
   state.loading = true;
   showSpinner(true);
   hideError();
@@ -206,6 +220,10 @@ async function loadImages(append = false) {
     }
 
     const data     = await fetchPage(cursor);
+
+    // Discard result if a newer load has already taken over
+    if (state._loadGen !== myGen) return;
+
     const newItems = data.items || [];
     const offset   = state.items.length;
 
@@ -217,7 +235,7 @@ async function loadImages(append = false) {
     updateControlBar();
     syncSelectionUI();
   } catch (err) {
-    showError(err.message);
+    if (state._loadGen === myGen) showError(err.message);
   } finally {
     state.loading = false;
     showSpinner(false);
