@@ -18,6 +18,8 @@
 | ♾ **Load All Pages** | Auto-paginates through all content with progress display |
 | ✅ **Multi-select** | Per-card checkboxes + Select All / Deselect All |
 | 🔎 **Lightbox** | Full-size preview, arrow key navigation, generation metadata |
+| ✨ **Send to a character** | Push a selection to [MyAIModelManager](https://myaimodelmanager.com) as an AI character you can chat with |
+| 🎭 **Gallery dashboard** | Connect your own MyAIModelManager API key at `/gallery`, create characters, and see the ones you made |
 | 📦 **Download as ZIP** | Server fetches & streams a ZIP of selected files (5 concurrent) |
 | 📋 **Copy URLs** | Clipboard copy for use with aria2, wget, or any download manager |
 | 💾 **Save URL list** | Exports a `.txt` TSV file of URLs + filenames |
@@ -61,6 +63,24 @@ Open **http://localhost:3456** in your browser.
 3. Enable the **🔞 NSFW** toggle.
 
 ---
+
+## 🎭 MyAIModelManager integration
+
+Open **`/gallery`**, paste an API key from your own
+[MyAIModelManager](https://myaimodelmanager.com) account, and you can turn
+Civitai artwork into a character you can talk to.
+
+The key is held in **your browser's local storage** and travels as an
+`X-MAM-Key` header on your own requests. The server never stores it, so two
+people using the same deployment only ever see characters belonging to their
+own key. Media is passed to the platform as Civitai CDN URLs, which it fetches
+itself — nothing is proxied or cached here.
+
+| Variable | Purpose |
+|---|---|
+| `SITE_URL` | Public origin, used for canonical/Open Graph URLs, `robots.txt` and `sitemap.xml`. Falls back to the request host. |
+| `BRAND_URL` | Where the promo links point. Defaults to `https://myaimodelmanager.com`. |
+| `MAM_API_URL` | API origin, if it differs from `BRAND_URL`. |
 
 ## 🔌 API
 

@@ -3,14 +3,83 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Civit.ai Downloader</title>
+
+  <title>Civit.ai Downloader — Download All Images &amp; Videos From Any Civitai Profile</title>
+  <meta name="description" content="Free Civit.ai downloader. Paste any Civitai username or profile URL to browse every image and video that creator posted, select the ones you want, and download them individually or as a ZIP." />
+  <link rel="canonical" href="{{SITE_URL}}/" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+
+  <link rel="icon" type="image/png" sizes="256x256" href="/img/mam-logo.png" />
+  <link rel="apple-touch-icon" href="/img/mam-logo.png" />
+  <meta name="theme-color" content="#0a0810" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Civit.ai Downloader" />
+  <meta property="og:title" content="Civit.ai Downloader — Download All Images &amp; Videos From Any Civitai Profile" />
+  <meta property="og:description" content="Browse a Civitai creator's full gallery, select what you want, and download it — or send it straight to an AI character you can chat with." />
+  <meta property="og:url" content="{{SITE_URL}}/" />
+  <meta property="og:image" content="{{SITE_URL}}/img/mam-logo.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Civit.ai Downloader — Download All Images &amp; Videos From Any Civitai Profile" />
+  <meta name="twitter:description" content="Browse a Civitai creator's full gallery, select what you want, and download it — or send it straight to an AI character you can chat with." />
+  <meta name="twitter:image" content="{{SITE_URL}}/img/mam-logo.png" />
+
   <link rel="stylesheet" href="style.css" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Civit.ai Downloader",
+    "url": "{{SITE_URL}}/",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Any (web browser)",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "description": "Browse and bulk download images and videos from any Civit.ai creator profile.",
+    "featureList": [
+      "Download images from a Civitai profile",
+      "Download videos and animations from a Civitai profile",
+      "Select individual items or a whole page",
+      "Bulk download everything as a ZIP",
+      "Copy or export the source URL list"
+    ],
+    "isRelatedTo": {
+      "@type": "WebApplication",
+      "name": "{{BRAND_NAME}}",
+      "url": "{{BRAND_URL}}"
+    }
+  }
+  </script>
 </head>
 <body>
 
 <header class="header">
   <div class="header-top">
-    <h1>🖼 Civit.ai Downloader</h1>
+    <div class="brandbar">
+      <div class="brandmark">
+        <img src="/img/mam-logo.png" alt="{{BRAND_NAME}}" width="36" height="36" />
+        <div>
+          <h1>Civit.ai Downloader</h1>
+          <p class="tagline">Browse and download every image and video from any Civit.ai creator — free, in your browser.</p>
+        </div>
+      </div>
+      <nav class="sitenav">
+        <a href="/" class="active">Downloader</a>
+        <a href="/gallery">Gallery</a>
+      </nav>
+    </div>
+
+    <aside class="promo promo-slim">
+      <img class="promo-logo" src="/img/mam-logo.png" alt="{{BRAND_NAME}} logo" width="40" height="40" loading="lazy" />
+      <div class="promo-body">
+        <p>
+          <b>Found art you love? Turn it into a character you can talk to.</b>
+          {{BRAND_NAME}} is an AI character platform — upload a character and its
+          media, then chat with it. Select images here and send them straight over.
+        </p>
+      </div>
+      <a class="promo-cta" href="{{BRAND_URL}}" target="_blank" rel="noopener">Try {{BRAND_NAME}} ↗</a>
+    </aside>
     <div class="search-row">
       <input
         type="text"
@@ -79,6 +148,7 @@
       <span class="speed-unit">MB/s</span>
     </div>
     <button id="downloadZipBtn" class="btn btn-primary" disabled>⬇ Download ZIP</button>
+    <button id="sendCharBtn" class="btn btn-primary" disabled>✨ Send to character…</button>
     <button id="copyUrlsBtn" class="btn btn-sm" disabled>📋 Copy URLs</button>
     <button id="downloadListBtn" class="btn btn-sm" disabled>📄 Save URL List</button>
   </div>
@@ -110,6 +180,122 @@
   </div>
 </div>
 
+<!-- Send selection to a MyAIModelManager character -->
+<div id="sendModal" class="backdrop" style="display:none">
+  <div class="modal">
+    <h2>Send to a character</h2>
+    <p class="modal-sub" id="sendSummary"></p>
+
+    <div id="sendNeedsKey" class="modal-note" style="display:none">
+      This needs your own {{BRAND_NAME}} API key.
+      <a href="/gallery">Connect on the Gallery page</a> — it takes a minute.
+    </div>
+
+    <div id="sendForm">
+      <label class="field">
+        <span>Character</span>
+        <select id="sendCharSelect"></select>
+      </label>
+
+      <div id="sendNewFields" style="display:none">
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="sendCharName" placeholder="e.g. Aria" />
+        </label>
+        <label class="field">
+          <span>Description <small>(personality, look, backstory)</small></span>
+          <textarea id="sendCharDesc" placeholder="Optional — used to shape the character."></textarea>
+        </label>
+        <p class="modal-note">
+          The first selected image becomes the character's portrait.
+        </p>
+      </div>
+    </div>
+
+    <div id="sendStatus" class="modal-status"></div>
+
+    <div class="modal-actions">
+      <button id="sendConfirmBtn" class="btn btn-primary">Send</button>
+      <button id="sendCancelBtn" class="btn btn-sm">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<section class="seo">
+  <h2>How to download images and videos from a Civit.ai profile</h2>
+  <p>
+    Paste a Civit.ai username or a full profile URL such as
+    <code>https://civitai.com/user/someone</code> and press <b>Load</b>. The
+    browser pulls that creator's gallery and lays every post out as a grid, so
+    you can see an entire profile at once instead of scrolling it page by page.
+    Files come straight from Civit.ai's CDN.
+  </p>
+
+  <h3>What you can do with the results</h3>
+  <dl class="seo-list">
+    <dt>Download the images</dt>
+    <dd>
+      Every post appears as a thumbnail you can open full size in the lightbox
+      first. Downloads pull the original file at full resolution, not the
+      resized grid preview.
+    </dd>
+
+    <dt>Download the videos</dt>
+    <dd>
+      Videos and animated posts are handled alongside images and play inline in
+      the lightbox, so you can check a clip before taking it. Filter to just
+      videos with the type selector.
+    </dd>
+
+    <dt>Select the ones you want</dt>
+    <dd>
+      Tick items individually, or shift-click to take a whole run at once.
+      Select the entire page with one button, and your picks persist while you
+      page deeper into the profile.
+    </dd>
+
+    <dt>Download everything as a ZIP file</dt>
+    <dd>
+      <b>Download ZIP</b> bundles the whole selection into one archive built on
+      the server and streamed back, so a large batch is a single download
+      instead of hundreds of clicks. An optional speed limit keeps the fetch
+      polite.
+    </dd>
+
+    <dt>Download everything from a profile</dt>
+    <dd>
+      Page through the creator's full history, or jump straight to a page, then
+      select all and ZIP. You can also copy the raw URL list or save it as a
+      text file to feed into your own downloader.
+    </dd>
+  </dl>
+
+  <h3>Turn what you found into a character you can chat with</h3>
+  <p>
+    Anything you select can go to
+    <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>
+    instead of your downloads folder. Pick the images, hit
+    <b>Send to character</b>, and they become an AI character with a portrait,
+    a gallery and a personality — one you can talk to. Manage the characters
+    you have made on the <a href="/gallery">Gallery page</a>.
+  </p>
+
+  <h3>Do I need an account?</h3>
+  <p>
+    Not to browse or download — that works straight away. A Civit.ai API key is
+    only needed to see content your account has access to. To send characters
+    to {{BRAND_NAME}} you use your own key from that platform, created on your
+    own account. Both keys stay in your browser's local storage and are only
+    ever used to serve your own requests.
+  </p>
+</section>
+
+<footer class="sitefoot">
+  <img src="/img/mam-logo.png" alt="" width="28" height="28" loading="lazy" />
+  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, the AI influencer business OS.</p>
+</footer>
+
+<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}";</script>
 <script src="app.js"></script>
 </body>
 </html>

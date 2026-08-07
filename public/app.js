@@ -194,6 +194,7 @@ function syncSelectionUI() {
   document.getElementById('downloadZipBtn').disabled  = !hasSelected;
   document.getElementById('copyUrlsBtn').disabled     = !hasSelected;
   document.getElementById('downloadListBtn').disabled = !hasSelected;
+  document.getElementById('sendCharBtn').disabled     = !hasSelected;
 
   // Sync card overlays
   document.querySelectorAll('.card-overlay').forEach(overlay => {
@@ -359,6 +360,149 @@ async function downloadZip() {
   } finally {
     document.getElementById('downloadZipBtn').disabled = state.selected.size === 0;
     setTimeout(() => setDownloadStatus(''), 6000);
+  }
+}
+
+/* ---- Send to a MyAIModelManager character ---- */
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const MAM_KEY = 'mam_api_key';
+const mamKey = () => localStorage.getItem(MAM_KEY) || '';
+
+function selectedItems() {
+  return state.items.filter(i => state.selected.has(i.id));
+}
+
+function setSendStatus(message, kind = '') {
+  const el = document.getElementById('sendStatus');
+  el.className = `modal-status ${kind}`;
+  el.innerHTML = message;
+}
+
+async function openSendModal() {
+  const items = selectedItems();
+  if (!items.length) return;
+
+  document.getElementById('sendModal').style.display = 'flex';
+  document.getElementById('sendSummary').textContent =
+    `${items.length} item${items.length === 1 ? '' : 's'} selected.`;
+  setSendStatus('');
+
+  const hasKey = Boolean(mamKey());
+  document.getElementById('sendNeedsKey').style.display = hasKey ? 'none' : 'block';
+  document.getElementById('sendForm').style.display = hasKey ? 'block' : 'none';
+  document.getElementById('sendConfirmBtn').disabled = !hasKey;
+  if (!hasKey) return;
+
+  const select = document.getElementById('sendCharSelect');
+  select.innerHTML = '<option value="">Loading your characters…</option>';
+
+  try {
+    const res = await fetch('/api/mam/characters?limit=100', {
+      headers: { 'X-MAM-Key': mamKey() },
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+
+    const options = (body.characters || [])
+      .map(c => `<option value="${c.chatId || c.id}">${escapeHtml(c.name || 'Untitled')}</option>`)
+      .join('');
+    select.innerHTML = `<option value="__new__">✨ Create a new character…</option>${options}`;
+    onSendCharChange();
+  } catch (err) {
+    select.innerHTML = '<option value="__new__">✨ Create a new character…</option>';
+    setSendStatus(escapeHtml(err.message), 'err');
+    onSendCharChange();
+  }
+}
+
+function onSendCharChange() {
+  const isNew = document.getElementById('sendCharSelect').value === '__new__';
+  document.getElementById('sendNewFields').style.display = isNew ? 'block' : 'none';
+}
+
+function closeSendModal() {
+  document.getElementById('sendModal').style.display = 'none';
+}
+
+async function confirmSend() {
+  const items = selectedItems();
+  if (!items.length) return;
+
+  const btn = document.getElementById('sendConfirmBtn');
+  const select = document.getElementById('sendCharSelect');
+  const creating = select.value === '__new__';
+  const headers = { 'X-MAM-Key': mamKey(), 'Content-Type': 'application/json' };
+
+  btn.disabled = true;
+  try {
+    let chatId = select.value;
+    let charUrl = '';
+    let media = items;
+
+    if (creating) {
+      const name = document.getElementById('sendCharName').value.trim();
+      if (!name) throw new Error('Give the new character a name.');
+
+      setSendStatus('Creating the character…');
+      // The first pick becomes the portrait, so it is not also sent as a
+      // gallery image below.
+      const [portrait, ...rest] = items;
+      const res = await fetch('/api/mam/characters', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name,
+          description: document.getElementById('sendCharDesc').value.trim(),
+          portraitUrl: portrait.url,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+      chatId = body.chatId;
+      charUrl = body.url;
+      media = rest;
+    }
+
+    if (!chatId) throw new Error('Pick a character to send to.');
+
+    let report = { added: 0, failed: [] };
+    if (media.length) {
+      setSendStatus(`Sending ${media.length} item${media.length === 1 ? '' : 's'}…`);
+      const res = await fetch(`/api/mam/characters/${chatId}/media`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          items: media.map(i => ({
+            url: i.url,
+            type: i.type,
+            prompt: i.meta?.prompt || '',
+            nsfw: (i.nsfwLevel || 0) > 1,
+          })),
+        }),
+      });
+      report = await res.json();
+      if (!res.ok) throw new Error(report.error || `Error ${res.status}`);
+    }
+
+    const link = charUrl
+      ? ` <a href="${charUrl}" target="_blank" rel="noopener">Open on ${window.BRAND_NAME} ↗</a>`
+      : '';
+    const failed = report.failed?.length
+      ? ` ${report.failed.length} item${report.failed.length === 1 ? '' : 's'} could not be sent.`
+      : '';
+    setSendStatus(
+      `✅ ${creating ? 'Character created. ' : ''}${report.added} item${report.added === 1 ? '' : 's'} added.${failed}${link}`,
+      failed ? 'warn' : 'ok'
+    );
+  } catch (err) {
+    setSendStatus(escapeHtml(err.message), 'err');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -711,6 +855,14 @@ function init() {
   document.getElementById('downloadZipBtn').addEventListener('click', downloadZip);
   document.getElementById('copyUrlsBtn').addEventListener('click', copyUrls);
   document.getElementById('downloadListBtn').addEventListener('click', saveUrlList);
+
+  document.getElementById('sendCharBtn').addEventListener('click', openSendModal);
+  document.getElementById('sendCancelBtn').addEventListener('click', closeSendModal);
+  document.getElementById('sendConfirmBtn').addEventListener('click', confirmSend);
+  document.getElementById('sendCharSelect').addEventListener('change', onSendCharChange);
+  document.getElementById('sendModal').addEventListener('click', (e) => {
+    if (e.target.id === 'sendModal') closeSendModal();
+  });
 
   // Pagination
   document.getElementById('loadMoreBtn').addEventListener('click', () => loadImages(true));

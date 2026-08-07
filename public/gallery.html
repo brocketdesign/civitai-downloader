@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Gallery — Your {{BRAND_NAME}} characters</title>
+  <meta name="description" content="Connect your {{BRAND_NAME}} account and manage the characters you created from Civit.ai artwork." />
+  <link rel="canonical" href="{{SITE_URL}}/gallery" />
+  <meta name="robots" content="noindex, nofollow" />
+
+  <link rel="icon" type="image/png" sizes="256x256" href="/img/mam-logo.png" />
+  <link rel="apple-touch-icon" href="/img/mam-logo.png" />
+  <meta name="theme-color" content="#0a0810" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="header">
+  <div class="header-top">
+    <div class="brandbar">
+      <div class="brandmark">
+        <img src="/img/mam-logo.png" alt="{{BRAND_NAME}}" width="36" height="36" />
+        <div>
+          <h1>Gallery</h1>
+          <p class="tagline">The characters you have created on {{BRAND_NAME}}.</p>
+        </div>
+      </div>
+      <nav class="sitenav">
+        <a href="/">Downloader</a>
+        <a href="/gallery" class="active">Gallery</a>
+      </nav>
+    </div>
+
+    <aside class="promo">
+      <img class="promo-logo" src="/img/mam-logo.png" alt="{{BRAND_NAME}} logo" width="56" height="56" loading="lazy" />
+      <div class="promo-body">
+        <h2>Powered by {{BRAND_NAME}}</h2>
+        <p>
+          {{BRAND_NAME}} is an AI character platform — upload a character and
+          its media, then talk to it. Connect your account below, then send
+          Civit.ai artwork straight into a character and start chatting.
+        </p>
+        <a class="promo-cta" href="{{BRAND_URL}}" target="_blank" rel="noopener">Open {{BRAND_NAME}} ↗</a>
+      </div>
+    </aside>
+  </div>
+</header>
+
+<main class="page">
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>{{BRAND_NAME}} connection</h2>
+      <span id="keyBadge" class="badge off">Not connected</span>
+    </div>
+
+    <p class="panel-note">
+      Publishing runs on your own {{BRAND_NAME}} account, so it needs your own
+      API key — there is no shared one. Go to
+      <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>,
+      create an account, and generate a key under your account's API keys. With
+      that key you can publish a character and chat with it on the platform.
+    </p>
+    <p class="panel-note">
+      The key is stored in <b>this browser's local storage</b> and sent only to
+      run your own requests. It is never saved on the server and never shared
+      with another visitor — everyone who uses this site sees only the
+      characters belonging to their own key.
+    </p>
+
+    <div class="keyrow">
+      <label class="field">
+        <span>{{BRAND_NAME}} API key</span>
+        <input type="password" id="mamKey" autocomplete="off" spellcheck="false" placeholder="clx_…" />
+      </label>
+      <button id="saveKeyBtn" class="btn btn-primary">Save &amp; connect</button>
+      <button id="clearKeyBtn" class="btn btn-sm">Forget key</button>
+    </div>
+    <div id="keyStatus" class="modal-status"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Create a character</h2>
+    </div>
+    <p class="panel-note">
+      Start one from scratch here, or go to the
+      <a href="/">downloader</a>, select Civit.ai artwork, and use
+      <b>Send to character</b> to build one from images you picked.
+    </p>
+
+    <div class="createrow">
+      <label class="field">
+        <span>Name</span>
+        <input type="text" id="newName" placeholder="e.g. Aria" />
+      </label>
+      <label class="field">
+        <span>Tags <small>(comma separated, max 5)</small></span>
+        <input type="text" id="newTags" placeholder="anime, sci-fi" />
+      </label>
+    </div>
+    <label class="field">
+      <span>Description <small>(personality, look, backstory)</small></span>
+      <textarea id="newDesc" placeholder="Without a portrait image, this is what the portrait gets drawn from."></textarea>
+    </label>
+    <label class="field">
+      <span>Portrait image URL <small>(optional)</small></span>
+      <input type="text" id="newPortrait" placeholder="https://image.civitai.com/…" />
+    </label>
+    <div class="modal-actions">
+      <button id="createBtn" class="btn btn-primary">Create character</button>
+    </div>
+    <div id="createStatus" class="modal-status"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Your characters</h2>
+      <button id="refreshBtn" class="btn btn-sm">Refresh</button>
+    </div>
+    <div id="charStatus" class="modal-status"></div>
+    <div id="charList" class="charlist"></div>
+  </section>
+
+</main>
+
+<footer class="sitefoot">
+  <img src="/img/mam-logo.png" alt="" width="28" height="28" loading="lazy" />
+  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, the AI influencer business OS.</p>
+</footer>
+
+<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}";</script>
+<script src="gallery.js"></script>
+</body>
+</html>

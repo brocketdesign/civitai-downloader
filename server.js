@@ -1,13 +1,72 @@
 const express = require('express');
 const archiver = require('archiver');
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
 const CIVITAI_API = 'https://civitai.com/api/v1';
 
+// ---- Public site / branding ----
+// SITE_URL is the origin this app is served from once it is online; canonical
+// and Open Graph URLs are built from it. Unset, we fall back to the request
+// host, which is right locally but wrong behind a proxy.
+const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, '');
+const BRAND_NAME = 'MyAIModelManager';
+const BRAND_URL = (process.env.BRAND_URL || 'https://myaimodelmanager.com').replace(/\/$/, '');
+const MAM_API = process.env.MAM_API_URL || BRAND_URL;
+
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// ---- HTML pages (templated, so they can carry absolute SEO URLs) ----
+
+const PAGES = { '/': 'index.html', '/gallery': 'gallery.html' };
+
+function siteUrl(req) {
+  return SITE_URL || `${req.protocol}://${req.get('host')}`;
+}
+
+function renderPage(req, file) {
+  const html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8');
+  return html
+    .replaceAll('{{SITE_URL}}', siteUrl(req))
+    .replaceAll('{{BRAND_NAME}}', BRAND_NAME)
+    .replaceAll('{{BRAND_URL}}', BRAND_URL);
+}
+
+for (const [route, file] of Object.entries(PAGES)) {
+  app.get(route, (req, res) => {
+    try {
+      res.type('html').send(renderPage(req, file));
+    } catch (err) {
+      console.error(`[page ${route}]`, err.message);
+      res.status(500).send('Page unavailable');
+    }
+  });
+}
+
+// index:false so the templated '/' above wins over the raw file on disk.
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(
+    'User-agent: *\n' +
+    'Allow: /$\n' +
+    'Disallow: /api/\n' +
+    `\nSitemap: ${siteUrl(req)}/sitemap.xml\n`
+  );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const root = siteUrl(req);
+  res.type('application/xml').send(
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    `  <url><loc>${root}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n` +
+    `  <url><loc>${root}/gallery</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>\n` +
+    '</urlset>\n'
+  );
+});
 
 // ---- Civit.ai API proxy ----
 
@@ -171,6 +230,170 @@ app.post('/api/download', async (req, res) => {
   await archive.finalize();
   console.log('[download] Zip complete.');
 });
+
+/* ------------------------------------------------------------------ *
+ *  MyAIModelManager proxy
+ *
+ *  Every visitor brings their own API key. It arrives on the X-MAM-Key
+ *  header, is used for exactly one upstream call, and is never written to
+ *  disk or held in a module variable — so two people using the site at the
+ *  same time can only ever see their own characters. The browser keeps the
+ *  key in its own localStorage; this server is a stateless relay.
+ * ------------------------------------------------------------------ */
+
+const MAM_TIMEOUT = 120_000;
+
+function mamKey(req) {
+  const key = (req.get('X-MAM-Key') || '').trim();
+  if (!key) {
+    const err = new Error(
+      `No ${BRAND_NAME} API key. Add one on the Gallery page — create an ` +
+      `account at ${BRAND_URL} and generate a key there.`
+    );
+    err.status = 401;
+    throw err;
+  }
+  return key;
+}
+
+async function mam(req, method, urlPath, body) {
+  const key = mamKey(req);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MAM_TIMEOUT);
+
+  let resp;
+  try {
+    resp = await fetch(`${MAM_API}${urlPath}`, {
+      method,
+      headers: {
+        'X-API-Key': key,
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const wrapped = new Error(
+      err.name === 'AbortError'
+        ? `${BRAND_NAME} took too long to respond.`
+        : `Could not reach ${BRAND_NAME}: ${err.message}`
+    );
+    wrapped.status = 502;
+    throw wrapped;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const payload = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(
+      resp.status === 401
+        ? 'API key rejected. Check the key on the Gallery page.'
+        : payload.error || payload.message || `${BRAND_NAME} returned ${resp.status}`
+    );
+    err.status = resp.status;
+    throw err;
+  }
+  return payload;
+}
+
+function mamRoute(handler) {
+  return async (req, res) => {
+    try {
+      res.json(await handler(req));
+    } catch (err) {
+      // Never echo the key back, even in an error.
+      res.status(err.status || 500).json({ error: err.message });
+    }
+  };
+}
+
+// Verify a key and report who it belongs to.
+app.get('/api/mam/me', mamRoute(req => mam(req, 'GET', '/api/external/me')));
+
+// The visitor's own characters.
+app.get('/api/mam/characters', mamRoute(async req => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+  const data = await mam(req, 'GET', `/api/external/characters?limit=${limit}`);
+  return { characters: data.characters || [] };
+}));
+
+// Create a character. A Civit.ai image URL can stand in as the portrait —
+// MyAIModelManager fetches it itself, so nothing is proxied through here.
+app.post('/api/mam/characters', mamRoute(async req => {
+  const { name, description, tags, portraitUrl, nsfw, visuals } = req.body || {};
+  if (!name || !String(name).trim()) {
+    const err = new Error('A character name is required.');
+    err.status = 400;
+    throw err;
+  }
+
+  const payload = {
+    name: String(name).trim(),
+    tags: String(tags || '').split(',').map(t => t.trim()).filter(Boolean).slice(0, 5),
+    nsfw: Boolean(nsfw),
+    generateCharacterSheet: Boolean(visuals),
+    generateCloseup: Boolean(visuals),
+    closeupAsThumbnail: false,
+  };
+
+  const desc = String(description || '').trim();
+  if (desc) payload.personalityInput = desc;
+
+  if (portraitUrl) payload.imageUrl = portraitUrl;
+  else if (desc) payload.imagePrompt = desc;   // let the remote draw one
+  else {
+    const err = new Error(
+      'Pick an image as the portrait, or write a description to generate one from.'
+    );
+    err.status = 400;
+    throw err;
+  }
+
+  const result = await mam(req, 'POST', '/api/external/create-character', payload);
+  const chatId = String(result.chatId || '');
+  if (!chatId) throw new Error('No character was created (the API returned no chatId).');
+  return { chatId, slug: result.slug || '', url: characterUrl(chatId, result.slug) };
+}));
+
+// Attach selected Civit.ai media to a character, one call per item so a
+// single bad URL never strands the rest of the batch.
+app.post('/api/mam/characters/:chatId/media', mamRoute(async req => {
+  const { chatId } = req.params;
+  const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : [];
+  if (!items.length) {
+    const err = new Error('Nothing selected to send.');
+    err.status = 400;
+    throw err;
+  }
+
+  const added = [];
+  const failed = [];
+
+  for (const item of items) {
+    const isVideo = item.type === 'video' || item.type === 'animation';
+    const endpoint = isVideo ? 'add-video' : 'add-image';
+    const body = {
+      prompt: String(item.prompt || '').slice(0, 2000),
+      nsfw: Boolean(item.nsfw),
+      isPrivate: false,
+      [isVideo ? 'videoUrl' : 'imageUrl']: item.url,
+    };
+    try {
+      await mam(req, 'POST', `/api/external/character/${chatId}/${endpoint}`, body);
+      added.push(item.url);
+    } catch (err) {
+      failed.push({ url: item.url, error: err.message });
+    }
+  }
+
+  return { added: added.length, failed, total: items.length };
+}));
+
+function characterUrl(chatId, slug) {
+  return slug ? `${BRAND_URL}/character/${slug}` : `${BRAND_URL}/chat/${chatId}`;
+}
 
 app.listen(PORT, () => {
   console.log('\n🖼  Civit.ai Downloader');
