@@ -18,8 +18,9 @@
 | ♾ **Load All Pages** | Auto-paginates through all content with progress display |
 | ✅ **Multi-select** | Per-card checkboxes + Select All / Deselect All |
 | 🔎 **Lightbox** | Full-size preview, arrow key navigation, generation metadata |
-| ✨ **Send to a character** | Push a selection to [MyAIModelManager](https://myaimodelmanager.com) as an AI character you can chat with |
-| 🎭 **Gallery dashboard** | Connect your own MyAIModelManager API key at `/gallery`, create characters, and see the ones you made |
+| ✨ **Send to a character** | Push a selection to [Chatlamix](https://chatlamix.com) as an AI character you can chat with |
+| 🎭 **Gallery dashboard** | Connect your own Chatlamix API key at `/gallery`, create characters, and see the ones you made |
+| 🔎 **Search-minted SEO pages** | Every search mints a crawlable creator / model / LoRA page — safe-for-work only, indexed once it has enough content |
 | 📦 **Download as ZIP** | Server fetches & streams a ZIP of selected files (5 concurrent) |
 | 📋 **Copy URLs** | Clipboard copy for use with aria2, wget, or any download manager |
 | 💾 **Save URL list** | Exports a `.txt` TSV file of URLs + filenames |
@@ -64,10 +65,10 @@ Open **http://localhost:3456** in your browser.
 
 ---
 
-## 🎭 MyAIModelManager integration
+## 🎭 Chatlamix integration
 
 Open **`/gallery`**, paste an API key from your own
-[MyAIModelManager](https://myaimodelmanager.com) account, and you can turn
+[Chatlamix](https://chatlamix.com) account, and you can turn
 Civitai artwork into a character you can talk to.
 
 The key is held in **your browser's local storage** and travels as an
@@ -79,8 +80,15 @@ itself — nothing is proxied or cached here.
 | Variable | Purpose |
 |---|---|
 | `SITE_URL` | Public origin, used for canonical/Open Graph URLs, `robots.txt` and `sitemap.xml`. Falls back to the request host. |
-| `BRAND_URL` | Where the promo links point. Defaults to `https://myaimodelmanager.com`. |
-| `MAM_API_URL` | API origin, if it differs from `BRAND_URL`. |
+| `BRAND_NAME` | Display name. Defaults to `Chatlamix`. |
+| `BRAND_URL` | Where the promo links point. Defaults to `https://chatlamix.com`. |
+| `BRAND_LOGIN_URL` | Where the "chat" / "animate" calls to action land. Defaults to `$BRAND_URL/login`. |
+| `BRAND_LOGO` | Logo path served from `public/`. Defaults to `/img/mam-logo.png`. |
+| `BRAND_TAGLINE` | Footer descriptor. Defaults to `the AI companion app`. |
+| `MAM_API_URL` | API origin. Defaults to `https://myaimodelmanager.com` — deliberately **not** derived from `BRAND_URL`, because the branding changes while the backend does not. |
+| `MONGODB_URI` | Enables the SEO pages. Unset, minting and `/creator`, `/model`, `/lora` are switched off and the rest of the app runs normally. |
+| `MONGODB_DB` | Database name. Defaults to `civitai_seo`. |
+| `SEO_MIN_ITEMS` | Images an entity needs before its page is indexable and enters the sitemap. Defaults to `12`. |
 
 ## 🔌 API
 
@@ -113,3 +121,31 @@ GET https://civitai.com/api/v1/images?username=X&sort=Newest&limit=100
 ## 📄 License
 
 [MIT](LICENSE) — free to use, fork, and modify.
+
+
+---
+
+## 🔎 Search-minted SEO pages
+
+Searching a creator does double duty: the images it pulls are kept in MongoDB,
+and that corpus backs a set of server-rendered pages.
+
+| Route | What it is |
+|---|---|
+| `/creator/:username` | A creator's safe-for-work gallery, the models they use, creators with a similar style |
+| `/model/:slug` | Everything made with one checkpoint, and who made it |
+| `/lora/:slug` | The same for a LoRA |
+| `/creators`, `/models` | Indexes, so no minted page is an orphan |
+| `/sitemap.xml` | Derived from the corpus — it cannot list a page that would not render |
+
+Two rules keep this from turning into a thin-page farm:
+
+- **A page must earn its place.** Below `SEO_MIN_ITEMS` images it renders
+  `noindex` and stays out of the sitemap. It still works for anyone following a
+  link; it just is not offered to crawlers.
+- **Nothing adult is indexed.** The gate in `lib/mint.js` fails closed: an image
+  is kept only if `nsfw === false` *and* `nsfwLevel === 'None'` *and*
+  `browsingLevel <= 1`. Models flagged `nsfw` or `poi` (trained on a real
+  person's likeness) never get a page.
+
+Minting is fire-and-forget — a slow or missing database never delays a search.

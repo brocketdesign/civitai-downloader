@@ -9,8 +9,8 @@
   <link rel="canonical" href="{{SITE_URL}}/gallery" />
   <meta name="robots" content="noindex, nofollow" />
 
-  <link rel="icon" type="image/png" sizes="256x256" href="/img/mam-logo.png" />
-  <link rel="apple-touch-icon" href="/img/mam-logo.png" />
+  <link rel="icon" type="image/png" sizes="256x256" href="{{BRAND_LOGO}}" />
+  <link rel="apple-touch-icon" href="{{BRAND_LOGO}}" />
   <meta name="theme-color" content="#0a0810" />
 
   <link rel="stylesheet" href="style.css" />
@@ -21,7 +21,7 @@
   <div class="header-top">
     <div class="brandbar">
       <div class="brandmark">
-        <img src="/img/mam-logo.png" alt="{{BRAND_NAME}}" width="36" height="36" />
+        <img src="{{BRAND_LOGO}}" alt="{{BRAND_NAME}}" width="36" height="36" />
         <div>
           <h1>Gallery</h1>
           <p class="tagline">The characters you have created on {{BRAND_NAME}}.</p>
@@ -29,18 +29,20 @@
       </div>
       <nav class="sitenav">
         <a href="/">Downloader</a>
+        <a href="/creators">Creators</a>
+        <a href="/models">Models</a>
         <a href="/gallery" class="active">Gallery</a>
       </nav>
     </div>
 
     <aside class="promo">
-      <img class="promo-logo" src="/img/mam-logo.png" alt="{{BRAND_NAME}} logo" width="56" height="56" loading="lazy" />
+      <img class="promo-logo" src="{{BRAND_LOGO}}" alt="{{BRAND_NAME}} logo" width="56" height="56" loading="lazy" />
       <div class="promo-body">
         <h2>Powered by {{BRAND_NAME}}</h2>
         <p>
-          {{BRAND_NAME}} is an AI character platform — upload a character and
-          its media, then talk to it. Connect your account below, then send
-          Civit.ai artwork straight into a character and start chatting.
+          {{BRAND_NAME}} is an AI companion app — upload a character and its
+          media, then talk to it. Connect your account below, then send Civit.ai
+          artwork straight into a character and start chatting.
         </p>
         <a class="promo-cta" href="{{BRAND_URL}}" target="_blank" rel="noopener">Open {{BRAND_NAME}} ↗</a>
       </div>
@@ -127,11 +129,11 @@
 </main>
 
 <footer class="sitefoot">
-  <img src="/img/mam-logo.png" alt="" width="28" height="28" loading="lazy" />
-  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, the AI influencer business OS.</p>
+  <img src="{{BRAND_LOGO}}" alt="" width="28" height="28" loading="lazy" />
+  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, {{BRAND_TAGLINE}}.</p>
 </footer>
 
-<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}";</script>
+<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}"; window.BRAND_LOGIN_URL = "{{BRAND_LOGIN_URL}}";</script>
 <script src="gallery.js"></script>
 </body>
 </html>

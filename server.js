@@ -3,18 +3,22 @@ const archiver = require('archiver');
 const fs = require('fs');
 const path = require('path');
 
+// Load .env when one is present (Railway injects real env vars instead).
+try { process.loadEnvFile(); } catch { /* no .env — fine */ }
+
+const { BRAND, API_ORIGIN } = require('./lib/brand');
+const store = require('./lib/store');
+const { mintQuietly } = require('./lib/mint');
+const seo = require('./lib/seo');
+
 const app = express();
 const PORT = process.env.PORT || 3456;
 const CIVITAI_API = 'https://civitai.com/api/v1';
 
-// ---- Public site / branding ----
 // SITE_URL is the origin this app is served from once it is online; canonical
 // and Open Graph URLs are built from it. Unset, we fall back to the request
 // host, which is right locally but wrong behind a proxy.
 const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, '');
-const BRAND_NAME = 'MyAIModelManager';
-const BRAND_URL = (process.env.BRAND_URL || 'https://myaimodelmanager.com').replace(/\/$/, '');
-const MAM_API = process.env.MAM_API_URL || BRAND_URL;
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -30,8 +34,11 @@ function renderPage(req, file) {
   const html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8');
   return html
     .replaceAll('{{SITE_URL}}', siteUrl(req))
-    .replaceAll('{{BRAND_NAME}}', BRAND_NAME)
-    .replaceAll('{{BRAND_URL}}', BRAND_URL);
+    .replaceAll('{{BRAND_NAME}}', BRAND.name)
+    .replaceAll('{{BRAND_URL}}', BRAND.url)
+    .replaceAll('{{BRAND_LOGIN_URL}}', BRAND.loginUrl)
+    .replaceAll('{{BRAND_LOGO}}', BRAND.logo)
+    .replaceAll('{{BRAND_TAGLINE}}', BRAND.tagline);
 }
 
 for (const [route, file] of Object.entries(PAGES)) {
@@ -51,19 +58,96 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(
     'User-agent: *\n' +
-    'Allow: /$\n' +
     'Disallow: /api/\n' +
+    'Disallow: /gallery\n' +
     `\nSitemap: ${siteUrl(req)}/sitemap.xml\n`
   );
 });
 
-app.get('/sitemap.xml', (req, res) => {
+/* ---- Search-minted SEO pages ----
+ *
+ * Nothing here is authored by hand. A creator or model page exists because a
+ * visitor searched for it, and becomes indexable once it has enough real
+ * content to be worth a crawl (see seo.MIN_ITEMS). Below that threshold the
+ * page still renders for anyone who follows a link, but ships noindex and stays
+ * out of the sitemap.
+ */
+
+function seoRoute(handler) {
+  return async (req, res) => {
+    try {
+      const db = await store.getDb();
+      if (!db) return res.status(503).type('html').send(notFound('Pages are warming up. Try again shortly.'));
+      const html = await handler(db, siteUrl(req), req);
+      if (!html) return res.status(404).type('html').send(notFound('Nothing indexed under that name yet.'));
+      res.type('html').send(html);
+    } catch (err) {
+      console.error(`[seo ${req.path}]`, err.message);
+      res.status(500).type('html').send(notFound('That page could not be built.'));
+    }
+  };
+}
+
+function notFound(message) {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" />` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
+    `<title>Not found</title><meta name="robots" content="noindex, follow" />` +
+    `<link rel="stylesheet" href="/style.css" /></head><body><main class="page">` +
+    `<section class="panel"><div class="panel-head"><h2>Not found</h2></div>` +
+    `<p class="panel-note">${message}</p>` +
+    `<div class="modal-actions"><a class="btn btn-primary" href="/">Search for a creator</a></div>` +
+    `</section></main></body></html>`;
+}
+
+app.get('/creators', seoRoute((db, site) => seo.creatorIndex(db, site)));
+app.get('/models',   seoRoute((db, site) => seo.modelIndex(db, site)));
+
+app.get('/creator/:username', seoRoute((db, site, req) =>
+  seo.creatorPage(db, site, req.params.username)));
+
+app.get('/model/:slug', seoRoute((db, site, req) =>
+  seo.modelPage(db, site, 'checkpoint', req.params.slug)));
+
+app.get('/lora/:slug', seoRoute((db, site, req) =>
+  seo.modelPage(db, site, 'lora', req.params.slug)));
+
+// The sitemap is derived from the corpus rather than maintained alongside it,
+// so it cannot list a page that would not render. Cached briefly because the
+// aggregation grows with the database.
+let sitemapCache = { xml: null, at: 0 };
+const SITEMAP_TTL = 15 * 60 * 1000;
+
+app.get('/sitemap.xml', async (req, res) => {
   const root = siteUrl(req);
+  const statics =
+    `  <url><loc>${root}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n` +
+    `  <url><loc>${root}/creators</loc><changefreq>daily</changefreq><priority>0.6</priority></url>\n` +
+    `  <url><loc>${root}/models</loc><changefreq>daily</changefreq><priority>0.6</priority></url>\n`;
+
+  let dynamic = '';
+  try {
+    if (Date.now() - sitemapCache.at < SITEMAP_TTL && sitemapCache.xml !== null) {
+      dynamic = sitemapCache.xml;
+    } else {
+      const db = await store.getDb();
+      if (db) {
+        const urls = await seo.sitemapUrls(db);
+        dynamic = urls.map(u =>
+          `  <url><loc>${root}${u.loc}</loc>` +
+          (u.lastmod ? `<lastmod>${new Date(u.lastmod).toISOString().slice(0, 10)}</lastmod>` : '') +
+          `<priority>${u.priority}</priority></url>`
+        ).join('\n') + (urls.length ? '\n' : '');
+        sitemapCache = { xml: dynamic, at: Date.now() };
+      }
+    }
+  } catch (err) {
+    console.error('[sitemap]', err.message);   // still serve the static entries
+  }
+
   res.type('application/xml').send(
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    `  <url><loc>${root}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n` +
-    `  <url><loc>${root}/gallery</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>\n` +
+    statics + dynamic +
     '</urlset>\n'
   );
 });
@@ -123,6 +207,11 @@ app.get('/api/images', async (req, res) => {
     if (nsfw === 'true') params.set('nsfw', 'true');
 
     const data = await civitaiFetch(`/images?${params}`, apiKey);
+
+    // Every search feeds the SEO corpus. Safe-for-work items only, and never
+    // awaited — a slow or broken store must not slow down a search.
+    mintQuietly(data.items);
+
     const meta = data.metadata || {};
     console.log('[civitai] sort:', sort, '| cursor in:', cursor || '(none)', '| items:', (data.items||[]).length, '| nextCursor:', meta.nextCursor, '| nextPage:', meta.nextPage ? meta.nextPage.slice(0, 80) : null);
     res.json(data);
@@ -232,7 +321,7 @@ app.post('/api/download', async (req, res) => {
 });
 
 /* ------------------------------------------------------------------ *
- *  MyAIModelManager proxy
+ *  Companion-app API proxy
  *
  *  Every visitor brings their own API key. It arrives on the X-MAM-Key
  *  header, is used for exactly one upstream call, and is never written to
@@ -247,8 +336,8 @@ function mamKey(req) {
   const key = (req.get('X-MAM-Key') || '').trim();
   if (!key) {
     const err = new Error(
-      `No ${BRAND_NAME} API key. Add one on the Gallery page — create an ` +
-      `account at ${BRAND_URL} and generate a key there.`
+      `No ${BRAND.name} API key. Add one on the Gallery page — create an ` +
+      `account at ${BRAND.url} and generate a key there.`
     );
     err.status = 401;
     throw err;
@@ -263,7 +352,7 @@ async function mam(req, method, urlPath, body) {
 
   let resp;
   try {
-    resp = await fetch(`${MAM_API}${urlPath}`, {
+    resp = await fetch(`${API_ORIGIN}${urlPath}`, {
       method,
       headers: {
         'X-API-Key': key,
@@ -276,8 +365,8 @@ async function mam(req, method, urlPath, body) {
   } catch (err) {
     const wrapped = new Error(
       err.name === 'AbortError'
-        ? `${BRAND_NAME} took too long to respond.`
-        : `Could not reach ${BRAND_NAME}: ${err.message}`
+        ? `${BRAND.name} took too long to respond.`
+        : `Could not reach ${BRAND.name}: ${err.message}`
     );
     wrapped.status = 502;
     throw wrapped;
@@ -290,7 +379,7 @@ async function mam(req, method, urlPath, body) {
     const err = new Error(
       resp.status === 401
         ? 'API key rejected. Check the key on the Gallery page.'
-        : payload.error || payload.message || `${BRAND_NAME} returned ${resp.status}`
+        : payload.error || payload.message || `${BRAND.name} returned ${resp.status}`
     );
     err.status = resp.status;
     throw err;
@@ -320,7 +409,7 @@ app.get('/api/mam/characters', mamRoute(async req => {
 }));
 
 // Create a character. A Civit.ai image URL can stand in as the portrait —
-// MyAIModelManager fetches it itself, so nothing is proxied through here.
+// The platform fetches it itself, so nothing is proxied through here.
 const IMAGE_STYLES = ['photorealistic', 'anime'];
 
 app.post('/api/mam/characters', mamRoute(async req => {
@@ -427,7 +516,7 @@ app.post('/api/mam/characters/:chatId/media', mamRoute(async req => {
 }));
 
 function characterUrl(chatId, slug) {
-  return slug ? `${BRAND_URL}/character/${slug}` : `${BRAND_URL}/chat/${chatId}`;
+  return slug ? `${BRAND.url}/character/${slug}` : `${BRAND.url}/chat/${chatId}`;
 }
 
 app.listen(PORT, () => {

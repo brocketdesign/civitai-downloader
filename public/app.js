@@ -363,7 +363,7 @@ async function downloadZip() {
   }
 }
 
-/* ---- Send to a MyAIModelManager character ---- */
+/* ---- Send to a companion-app character ---- */
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c =>
@@ -437,7 +437,7 @@ async function awaitCharacterJob(jobId, headers) {
     if (body.chatId) return body;
   }
 
-  throw new Error('The character is taking unusually long to build. Check MyAIModelManager in a moment.');
+  throw new Error(`The character is taking unusually long to build. Check ${window.BRAND_NAME} in a moment.`);
 }
 
 function onSendCharChange() {
@@ -504,7 +504,9 @@ async function confirmSend() {
             url: i.url,
             type: i.type,
             prompt: i.meta?.prompt || '',
-            nsfw: (i.nsfwLevel || 0) > 1,
+            // nsfwLevel is a string ('None' | 'Soft' | 'Mature' | 'X'), so a
+            // numeric comparison here silently marked everything safe.
+            nsfw: i.nsfw === true || (i.nsfwLevel && i.nsfwLevel !== 'None'),
           })),
         }),
       });
@@ -821,11 +823,14 @@ function init() {
   // Render history chips
   renderHistory();
 
-  // Auto-restore last visited username
-  const lastUsername = localStorage.getItem('civitai_last_username');
+  // A ?u= in the URL comes from a minted creator page and wins over history,
+  // so those pages land the visitor straight on that creator's gallery.
+  const linked = parseUsername(new URLSearchParams(location.search).get('u') || '');
+  const lastUsername = linked || localStorage.getItem('civitai_last_username');
   if (lastUsername) {
     urlInput.value = lastUsername;
     state.username = lastUsername;
+    if (linked) addToHistory(linked);
     loadImages(false);
   }
 

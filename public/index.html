@@ -9,8 +9,8 @@
   <link rel="canonical" href="{{SITE_URL}}/" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
 
-  <link rel="icon" type="image/png" sizes="256x256" href="/img/mam-logo.png" />
-  <link rel="apple-touch-icon" href="/img/mam-logo.png" />
+  <link rel="icon" type="image/png" sizes="256x256" href="{{BRAND_LOGO}}" />
+  <link rel="apple-touch-icon" href="{{BRAND_LOGO}}" />
   <meta name="theme-color" content="#0a0810" />
 
   <meta property="og:type" content="website" />
@@ -18,11 +18,11 @@
   <meta property="og:title" content="Civit.ai Downloader — Download All Images &amp; Videos From Any Civitai Profile" />
   <meta property="og:description" content="Browse a Civitai creator's full gallery, select what you want, and download it — or send it straight to an AI character you can chat with." />
   <meta property="og:url" content="{{SITE_URL}}/" />
-  <meta property="og:image" content="{{SITE_URL}}/img/mam-logo.png" />
+  <meta property="og:image" content="{{SITE_URL}}{{BRAND_LOGO}}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Civit.ai Downloader — Download All Images &amp; Videos From Any Civitai Profile" />
   <meta name="twitter:description" content="Browse a Civitai creator's full gallery, select what you want, and download it — or send it straight to an AI character you can chat with." />
-  <meta name="twitter:image" content="{{SITE_URL}}/img/mam-logo.png" />
+  <meta name="twitter:image" content="{{SITE_URL}}{{BRAND_LOGO}}" />
 
   <link rel="stylesheet" href="style.css" />
 
@@ -57,7 +57,7 @@
   <div class="header-top">
     <div class="brandbar">
       <div class="brandmark">
-        <img src="/img/mam-logo.png" alt="{{BRAND_NAME}}" width="36" height="36" />
+        <img src="{{BRAND_LOGO}}" alt="{{BRAND_NAME}}" width="36" height="36" />
         <div>
           <h1>Civit.ai Downloader</h1>
           <p class="tagline">Browse and download every image and video from any Civit.ai creator — free, in your browser.</p>
@@ -65,17 +65,20 @@
       </div>
       <nav class="sitenav">
         <a href="/" class="active">Downloader</a>
+        <a href="/creators">Creators</a>
+        <a href="/models">Models</a>
         <a href="/gallery">Gallery</a>
       </nav>
     </div>
 
     <aside class="promo promo-slim">
-      <img class="promo-logo" src="/img/mam-logo.png" alt="{{BRAND_NAME}} logo" width="40" height="40" loading="lazy" />
+      <img class="promo-logo" src="{{BRAND_LOGO}}" alt="{{BRAND_NAME}} logo" width="40" height="40" loading="lazy" />
       <div class="promo-body">
         <p>
           <b>Found art you love? Turn it into a character you can talk to.</b>
-          {{BRAND_NAME}} is an AI character platform — upload a character and its
-          media, then chat with it. Select images here and send them straight over.
+          {{BRAND_NAME}} is an AI companion app — give any image a personality and
+          start a conversation, or animate a still into a short video. Select
+          images here and send them straight over.
         </p>
       </div>
       <a class="promo-cta" href="{{BRAND_URL}}" target="_blank" rel="noopener">Try {{BRAND_NAME}} ↗</a>
@@ -180,7 +183,7 @@
   </div>
 </div>
 
-<!-- Send selection to a MyAIModelManager character -->
+<!-- Send selection to a companion-app character -->
 <div id="sendModal" class="backdrop" style="display:none">
   <div class="modal">
     <h2>Send to a character</h2>
@@ -297,12 +300,24 @@
   </p>
 </section>
 
+<section class="seo">
+  <h2>Browse what other people have looked up</h2>
+  <p>
+    Every creator searched here gets a page of their own — a safe-for-work
+    gallery you can browse without paging through the site, plus the models and
+    LoRAs behind the art. Start from the
+    <a href="/creators">creator index</a> or the
+    <a href="/models">model and LoRA index</a>, or search a username above and
+    a page for that creator builds itself.
+  </p>
+</section>
+
 <footer class="sitefoot">
-  <img src="/img/mam-logo.png" alt="" width="28" height="28" loading="lazy" />
-  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, the AI influencer business OS.</p>
+  <img src="{{BRAND_LOGO}}" alt="" width="28" height="28" loading="lazy" />
+  <p>A free tool by <a href="{{BRAND_URL}}" target="_blank" rel="noopener">{{BRAND_NAME}}</a>, {{BRAND_TAGLINE}}.</p>
 </footer>
 
-<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}";</script>
+<script>window.BRAND_URL = "{{BRAND_URL}}"; window.BRAND_NAME = "{{BRAND_NAME}}"; window.BRAND_LOGIN_URL = "{{BRAND_LOGIN_URL}}";</script>
 <script src="app.js"></script>
 </body>
 </html>

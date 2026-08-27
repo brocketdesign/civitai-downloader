@@ -609,7 +609,7 @@ body.shift-held .card-inner { cursor: cell; }
 }
 
 /* ==================================================================
-   MyAIModelManager branding, gallery dashboard, and landing-page copy
+   Brand bar, gallery dashboard, and landing-page copy
    ================================================================== */
 
 .brandbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }

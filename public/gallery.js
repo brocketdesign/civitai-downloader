@@ -1,4 +1,4 @@
-/* Gallery — connect a MyAIModelManager account and manage its characters.
+/* Gallery — connect a companion-app account and manage its characters.
  *
  * The API key never leaves this browser except as a header on the visitor's
  * own requests. The server holds nothing, so each visitor only ever sees the
