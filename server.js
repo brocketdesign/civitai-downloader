@@ -321,8 +321,10 @@ app.get('/api/mam/characters', mamRoute(async req => {
 
 // Create a character. A Civit.ai image URL can stand in as the portrait —
 // MyAIModelManager fetches it itself, so nothing is proxied through here.
+const IMAGE_STYLES = ['photorealistic', 'anime'];
+
 app.post('/api/mam/characters', mamRoute(async req => {
-  const { name, description, tags, portraitUrl, nsfw, visuals } = req.body || {};
+  const { name, description, tags, portraitUrl, nsfw, visuals, imageStyle } = req.body || {};
   if (!name || !String(name).trim()) {
     const err = new Error('A character name is required.');
     err.status = 400;
@@ -336,6 +338,7 @@ app.post('/api/mam/characters', mamRoute(async req => {
     generateCharacterSheet: Boolean(visuals),
     generateCloseup: Boolean(visuals),
     closeupAsThumbnail: false,
+    imageStyle: IMAGE_STYLES.includes(imageStyle) ? imageStyle : 'photorealistic',
   };
 
   const desc = String(description || '').trim();
@@ -351,11 +354,43 @@ app.post('/api/mam/characters', mamRoute(async req => {
     throw err;
   }
 
+  // Creation is an AI pipeline that runs for minutes, so the remote answers
+  // 202 + a jobId and we hand that back for the browser to poll.
   const result = await mam(req, 'POST', '/api/external/create-character', payload);
-  const chatId = String(result.chatId || '');
-  if (!chatId) throw new Error('No character was created (the API returned no chatId).');
-  return { chatId, slug: result.slug || '', url: characterUrl(chatId, result.slug) };
+  const done = characterFromJob(result);
+  if (done) return done;
+
+  const jobId = String(result.jobId || '');
+  if (!jobId) {
+    console.error('create-character returned neither chatId nor jobId:', JSON.stringify(result).slice(0, 1000));
+    throw new Error('No character was created (the API returned no chatId).');
+  }
+  return { jobId, status: result.status || 'pending' };
 }));
+
+// Poll a character-creation job. `pending` means keep asking.
+app.get('/api/mam/characters/job/:jobId', mamRoute(async req => {
+  const jobId = encodeURIComponent(req.params.jobId);
+  const job = await mam(req, 'GET', `/api/external/create-character/job/${jobId}`);
+
+  if (job.status === 'failed') {
+    const err = new Error(job.error || 'The character could not be created.');
+    err.status = 502;
+    throw err;
+  }
+
+  // The visuals may still be generating; the character itself is already usable.
+  const done = characterFromJob(job);
+  return done || { jobId: req.params.jobId, status: job.status || 'pending' };
+}));
+
+// A completed job (or a legacy synchronous reply) carries chatId + slug.
+function characterFromJob(body) {
+  const chatId = String(body.chatId || body.character?._id || '');
+  if (!chatId) return null;
+  const slug = body.slug || '';
+  return { chatId, slug, status: 'completed', url: characterUrl(chatId, slug) };
+}
 
 // Attach selected Civit.ai media to a character, one call per item so a
 // single bad URL never strands the rest of the batch.

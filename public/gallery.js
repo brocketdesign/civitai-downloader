@@ -126,7 +126,7 @@ function escapeHtml(s) {
 }
 
 function renderCharacter(c) {
-  const id = c.chatId || c.id || '';
+  const id = c.chatId || c._id || c.id || '';
   const name = escapeHtml(c.name || 'Untitled');
   const thumb = c.thumbnail || c.imageUrl || c.image || '';
   const intro = escapeHtml((c.intro || c.description || '').slice(0, 140));

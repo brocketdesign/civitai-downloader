@@ -409,7 +409,7 @@ async function openSendModal() {
     if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
 
     const options = (body.characters || [])
-      .map(c => `<option value="${c.chatId || c.id}">${escapeHtml(c.name || 'Untitled')}</option>`)
+      .map(c => `<option value="${c.chatId || c._id || c.id}">${escapeHtml(c.name || 'Untitled')}</option>`)
       .join('');
     select.innerHTML = `<option value="__new__">✨ Create a new character…</option>${options}`;
     onSendCharChange();
@@ -418,6 +418,26 @@ async function openSendModal() {
     setSendStatus(escapeHtml(err.message), 'err');
     onSendCharChange();
   }
+}
+
+// Creating a character is a multi-minute AI pipeline on the remote side, so the
+// server hands back a job id and we wait it out here.
+async function awaitCharacterJob(jobId, headers) {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  let waited = 0;
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 3000));
+    waited += 3;
+    setSendStatus(`Creating the character… (${waited}s — this takes a minute or two)`);
+
+    const res = await fetch(`/api/mam/characters/job/${encodeURIComponent(jobId)}`, { headers });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+    if (body.chatId) return body;
+  }
+
+  throw new Error('The character is taking unusually long to build. Check MyAIModelManager in a moment.');
 }
 
 function onSendCharChange() {
@@ -459,10 +479,13 @@ async function confirmSend() {
           name,
           description: document.getElementById('sendCharDesc').value.trim(),
           portraitUrl: portrait.url,
+          imageStyle: document.getElementById('sendCharStyle').value,
         }),
       });
-      const body = await res.json();
+      let body = await res.json();
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+      if (!body.chatId && body.jobId) body = await awaitCharacterJob(body.jobId, headers);
+
       chatId = body.chatId;
       charUrl = body.url;
       media = rest;
