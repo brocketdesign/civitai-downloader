@@ -465,8 +465,8 @@ async function confirmSend() {
     let media = items;
 
     if (creating) {
+      // Optional — the server invents a style-matched name when it's blank.
       const name = document.getElementById('sendCharName').value.trim();
-      if (!name) throw new Error('Give the new character a name.');
 
       setSendStatus('Creating the character…');
       // The first pick becomes the portrait, so it is not also sent as a

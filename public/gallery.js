@@ -154,11 +154,8 @@ async function createCharacter() {
     return;
   }
 
+  // Optional — the server invents a style-matched name when it's blank.
   const name = $('newName').value.trim();
-  if (!name) {
-    setStatus(status, 'A name is required.', 'err');
-    return;
-  }
 
   btn.disabled = true;
   setStatus(status, 'Creating…', '');

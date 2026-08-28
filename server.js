@@ -412,22 +412,39 @@ app.get('/api/mam/characters', mamRoute(async req => {
 // The platform fetches it itself, so nothing is proxied through here.
 const IMAGE_STYLES = ['photorealistic', 'anime'];
 
+// Name pools for auto-generated characters, one per image style so an anime
+// character gets a name that fits the art. Skip names so overused in AI
+// character generators they read as placeholder ("Aria", "Luna", "Nova").
+const NAME_POOLS = {
+  anime: {
+    first: ['Hikari', 'Rin', 'Yuzuki', 'Kanna', 'Mio', 'Ayame', 'Sora', 'Kirie', 'Mitsuki', 'Asuka', 'Nozomi', 'Chiyo', 'Rei', 'Shizuku', 'Kohaku', 'Mamori', 'Tsubaki', 'Yuina', 'Hotaru', 'Kasumi'],
+    last: ['Aozora', 'Hoshino', 'Kurosawa', 'Amagi', 'Shirakawa', 'Tsukishima', 'Minazuki', 'Kagurazaka', 'Fuyutsuki', 'Hanabira', 'Yumesaki', 'Sakuragi', 'Mizuhara', 'Kanzaki', 'Aizawa'],
+  },
+  photorealistic: {
+    first: ['Elara', 'Mireille', 'Cassandra', 'Ingrid', 'Sable', 'Rosalind', 'Marisol', 'Delphine', 'Anouk', 'Vivienne', 'Seraphine', 'Odette', 'Isolde', 'Camille', 'Freya', 'Lysandra', 'Noor', 'Evangeline', 'Colette', 'Thalia'],
+    last: ['Vance', 'Marchetti', 'Ashworth', 'Beaumont', 'Kessler', 'Rivard', 'Okafor', 'Sinclair', 'Vasquez', 'Halloran', 'Duval', 'Nakamura', 'Sørensen', 'Blackwood', 'Ferreira', 'Almeida', 'Winslow', 'Castellan'],
+  },
+};
+
+function generateCharacterName(imageStyle) {
+  const pool = NAME_POOLS[imageStyle] || NAME_POOLS.photorealistic;
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  return `${pick(pool.first)} ${pick(pool.last)}`;
+}
+
 app.post('/api/mam/characters', mamRoute(async req => {
   const { name, description, tags, portraitUrl, nsfw, visuals, imageStyle } = req.body || {};
-  if (!name || !String(name).trim()) {
-    const err = new Error('A character name is required.');
-    err.status = 400;
-    throw err;
-  }
+  const style = IMAGE_STYLES.includes(imageStyle) ? imageStyle : 'photorealistic';
 
   const payload = {
-    name: String(name).trim(),
+    // When the visitor leaves the name blank, invent one that fits the style.
+    name: String(name || '').trim() || generateCharacterName(style),
     tags: String(tags || '').split(',').map(t => t.trim()).filter(Boolean).slice(0, 5),
     nsfw: Boolean(nsfw),
     generateCharacterSheet: Boolean(visuals),
     generateCloseup: Boolean(visuals),
     closeupAsThumbnail: false,
-    imageStyle: IMAGE_STYLES.includes(imageStyle) ? imageStyle : 'photorealistic',
+    imageStyle: style,
   };
 
   const desc = String(description || '').trim();
