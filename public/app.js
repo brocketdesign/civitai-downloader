@@ -425,16 +425,38 @@ async function openSendModal() {
 async function awaitCharacterJob(jobId, headers) {
   const deadline = Date.now() + 10 * 60 * 1000;
   let waited = 0;
+  // A deploy restart or a proxy blip mid-poll returns a non-JSON 5xx; ride it
+  // out instead of aborting a build that is still running remotely.
+  let consecutiveFailures = 0;
 
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 3000));
     waited += 3;
     setSendStatus(`Creating the character… (${waited}s — this takes a minute or two)`);
 
-    const res = await fetch(`/api/mam/characters/job/${encodeURIComponent(jobId)}`, { headers });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-    if (body.chatId) return body;
+    try {
+      const res = await fetch(`/api/mam/characters/job/${encodeURIComponent(jobId)}`, { headers });
+      const text = await res.text();
+      if (!res.ok) {
+        // Safari's res.json() on an HTML error page yields "The string did not
+        // match the expected pattern." — parse defensively and show something sane.
+        let body = {};
+        try { body = JSON.parse(text); } catch { /* gateway HTML or empty body */ }
+        throw new Error(body.error || `Error ${res.status}`);
+      }
+      consecutiveFailures = 0;
+      const body = JSON.parse(text);
+      if (body.chatId) return body;
+    } catch (err) {
+      // A job the remote marked failed is final — surface it. Anything else
+      // (network drop, 502/504 gateway page) is transient; keep polling.
+      if (err.message && !/^Error 5/.test(err.message) && !/failed to fetch/i.test(err.message)) {
+        throw err;
+      }
+      if (++consecutiveFailures >= 10) {
+        throw new Error('Lost contact with the server while building. The character may still finish — check the site in a moment.');
+      }
+    }
   }
 
   throw new Error(`The character is taking unusually long to build. Check ${window.BRAND_NAME} in a moment.`);

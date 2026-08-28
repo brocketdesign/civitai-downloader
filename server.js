@@ -6,6 +6,12 @@ const path = require('path');
 // Load .env when one is present (Railway injects real env vars instead).
 try { process.loadEnvFile(); } catch { /* no .env — fine */ }
 
+// The MongoDB driver expects the web-standard global crypto (Node ≥ 19); on
+// older runtimes it throws "crypto is not defined". Backfill from node:crypto.
+if (!globalThis.crypto) {
+  globalThis.crypto = require('node:crypto').webcrypto;
+}
+
 const { BRAND, API_ORIGIN } = require('./lib/brand');
 const store = require('./lib/store');
 const { mintQuietly } = require('./lib/mint');
