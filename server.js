@@ -53,7 +53,16 @@ for (const [route, file] of Object.entries(PAGES)) {
 }
 
 // index:false so the templated '/' above wins over the raw file on disk.
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+// no-cache still allows 304s via ETag, but never serves a stale script after
+// a deploy — heuristically cached JS once shipped an old validator to users.
+app.use(express.static(path.join(__dirname, 'public'), {
+  index: false,
+  setHeaders(res, filePath) {
+    if (/\.(js|css|html)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(
