@@ -417,11 +417,44 @@ function mamRoute(handler) {
 // Verify a key and report who it belongs to.
 app.get('/api/mam/me', mamRoute(req => mam(req, 'GET', '/api/external/me')));
 
-// The visitor's own characters.
+// The visitor's own characters, merged across every destination site so each
+// card links to the domain the character actually lives on. A character that
+// shows up from more than one site (shared backend) is only listed once, from
+// the first site that returned it.
 app.get('/api/mam/characters', mamRoute(async req => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-  const data = await mam(req, 'GET', `/api/external/characters?limit=${limit}`);
-  return { characters: data.characters || [] };
+
+  const results = await Promise.all(Object.values(DESTINATIONS).map(async destination => {
+    try {
+      const data = await mam(req, 'GET', `/api/external/characters?limit=${limit}`, undefined, destination);
+      return { destination, characters: data.characters || [] };
+    } catch (err) {
+      // The default site's auth failure is the real "bad key" signal; another
+      // site rejecting the same key just means no characters there.
+      if (destination.key !== 'mymodelmanager' && (err.status === 401 || err.status === 403)) {
+        return { destination, characters: [] };
+      }
+      throw err;
+    }
+  }));
+
+  const seen = new Set();
+  const characters = [];
+  for (const { destination, characters: list } of results) {
+    for (const c of list) {
+      const chatId = String(c.chatId || c._id || c.id || '');
+      if (chatId && seen.has(chatId)) continue;
+      if (chatId) seen.add(chatId);
+      characters.push({
+        ...c,
+        chatId,
+        url: characterUrl(chatId, c.slug || '', destination),
+        destination: destination.key,
+        siteName: destination.name,
+      });
+    }
+  }
+  return { characters };
 }));
 
 // Create a character. A Civit.ai image URL can stand in as the portrait —

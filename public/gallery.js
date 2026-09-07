@@ -130,7 +130,9 @@ function renderCharacter(c) {
   const name = escapeHtml(c.name || 'Untitled');
   const thumb = c.thumbnail || c.imageUrl || c.image || '';
   const intro = escapeHtml((c.intro || c.description || '').slice(0, 140));
-  const href = c.slug ? `${BRAND_URL}/character/${c.slug}` : `${BRAND_URL}/chat/${id}`;
+  // The server knows which site each character lives on and returns a ready
+  // link; the fallback only covers stale cached responses.
+  const href = c.url || (c.slug ? `${BRAND_URL}/character/${c.slug}` : `${BRAND_URL}/chat/${id}`);
 
   return `
     <article class="charcard">

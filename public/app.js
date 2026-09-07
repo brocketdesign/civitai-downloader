@@ -409,7 +409,11 @@ async function openSendModal() {
     if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
 
     const options = (body.characters || [])
-      .map(c => `<option value="${c.chatId || c._id || c.id}">${escapeHtml(c.name || 'Untitled')}</option>`)
+      .map(c => {
+        const id = c.chatId || c._id || c.id;
+        const dest = c.destination ? ` data-destination="${escapeHtml(c.destination)}"` : '';
+        return `<option value="${escapeHtml(id)}"${dest}>${escapeHtml(c.name || 'Untitled')}</option>`;
+      })
       .join('');
     select.innerHTML = `<option value="__new__">✨ Create a new character…</option>${options}`;
     onSendCharChange();
@@ -493,6 +497,10 @@ async function confirmSend() {
     let destination = '';
     let media = items;
 
+    if (!creating) {
+      // Existing characters may live on any of the brand sites.
+      destination = select.selectedOptions[0]?.dataset.destination || '';
+    }
     if (creating) {
       // Optional — the server invents a style-matched name when it's blank.
       const name = document.getElementById('sendCharName').value.trim();
