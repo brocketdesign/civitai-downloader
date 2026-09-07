@@ -465,6 +465,11 @@ async function awaitCharacterJob(jobId, headers) {
 function onSendCharChange() {
   const isNew = document.getElementById('sendCharSelect').value === '__new__';
   document.getElementById('sendNewFields').style.display = isNew ? 'block' : 'none';
+  // Anime characters always go to Seisei, so the use case only matters for
+  // photorealistic ones.
+  const style = document.getElementById('sendCharStyle').value;
+  document.getElementById('sendUseCaseField').style.display =
+    isNew && style !== 'anime' ? 'block' : 'none';
 }
 
 function closeSendModal() {
@@ -484,6 +489,8 @@ async function confirmSend() {
   try {
     let chatId = select.value;
     let charUrl = '';
+    let siteName = window.BRAND_NAME;
+    let destination = '';
     let media = items;
 
     if (creating) {
@@ -502,6 +509,7 @@ async function confirmSend() {
           description: document.getElementById('sendCharDesc').value.trim(),
           portraitUrl: portrait.url,
           imageStyle: document.getElementById('sendCharStyle').value,
+          useCase: document.getElementById('sendCharUseCase').value,
         }),
       });
       let body = await res.json();
@@ -510,6 +518,8 @@ async function confirmSend() {
 
       chatId = body.chatId;
       charUrl = body.url;
+      siteName = body.siteName || siteName;
+      destination = body.destination || '';
       media = rest;
     }
 
@@ -522,6 +532,7 @@ async function confirmSend() {
         method: 'POST',
         headers,
         body: JSON.stringify({
+          destination,
           items: media.map(i => ({
             url: i.url,
             type: i.type,
@@ -537,7 +548,7 @@ async function confirmSend() {
     }
 
     const link = charUrl
-      ? ` <a href="${charUrl}" target="_blank" rel="noopener">Open on ${window.BRAND_NAME} ↗</a>`
+      ? ` <a href="${charUrl}" target="_blank" rel="noopener">Open on ${escapeHtml(siteName)} ↗</a>`
       : '';
     const failed = report.failed?.length
       ? ` ${report.failed.length} item${report.failed.length === 1 ? '' : 's'} could not be sent.`
@@ -910,6 +921,7 @@ function init() {
   document.getElementById('sendCancelBtn').addEventListener('click', closeSendModal);
   document.getElementById('sendConfirmBtn').addEventListener('click', confirmSend);
   document.getElementById('sendCharSelect').addEventListener('change', onSendCharChange);
+  document.getElementById('sendCharStyle').addEventListener('change', onSendCharChange);
   document.getElementById('sendModal').addEventListener('click', (e) => {
     if (e.target.id === 'sendModal') closeSendModal();
   });

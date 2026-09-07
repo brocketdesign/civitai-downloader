@@ -12,7 +12,7 @@ if (!globalThis.crypto) {
   globalThis.crypto = require('node:crypto').webcrypto;
 }
 
-const { BRAND, API_ORIGIN } = require('./lib/brand');
+const { BRAND, API_ORIGIN, DESTINATIONS } = require('./lib/brand');
 const store = require('./lib/store');
 const { mintQuietly } = require('./lib/mint');
 const seo = require('./lib/seo');
@@ -360,14 +360,15 @@ function mamKey(req) {
   return key;
 }
 
-async function mam(req, method, urlPath, body) {
+async function mam(req, method, urlPath, body, destination) {
   const key = mamKey(req);
+  const origin = (destination || DESTINATIONS.mymodelmanager).api;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MAM_TIMEOUT);
 
   let resp;
   try {
-    resp = await fetch(`${API_ORIGIN}${urlPath}`, {
+    resp = await fetch(`${origin}${urlPath}`, {
       method,
       headers: {
         'X-API-Key': key,
@@ -447,9 +448,35 @@ function generateCharacterName(imageStyle) {
   return `${pick(pool.first)} ${pick(pool.last)}`;
 }
 
+// Where a character is created, from its image style and use case.
+const USE_CASES = ['professional', 'casual'];
+
+function destinationFor(imageStyle, useCase) {
+  if (imageStyle === 'anime') return DESTINATIONS.seisei;
+  return useCase === 'casual' ? DESTINATIONS.chatlamix : DESTINATIONS.mymodelmanager;
+}
+
+// Job ids are prefixed with their destination so polling and media attaches
+// land on the same site the character was created on. Unprefixed ids (older
+// links, or jobs made before routing existed) keep using the default origin.
+function encodeJobId(jobId, destination) {
+  return `${destination.key}:${jobId}`;
+}
+
+function decodeJobId(prefixed) {
+  const idx = String(prefixed).indexOf(':');
+  if (idx > 0) {
+    const destination = DESTINATIONS[prefixed.slice(0, idx)];
+    if (destination) return { destination, jobId: prefixed.slice(idx + 1) };
+  }
+  return { destination: DESTINATIONS.mymodelmanager, jobId: prefixed };
+}
+
 app.post('/api/mam/characters', mamRoute(async req => {
-  const { name, description, tags, portraitUrl, nsfw, visuals, imageStyle } = req.body || {};
+  const { name, description, tags, portraitUrl, nsfw, visuals, imageStyle, useCase } = req.body || {};
   const style = IMAGE_STYLES.includes(imageStyle) ? imageStyle : 'photorealistic';
+  const use = USE_CASES.includes(useCase) ? useCase : 'professional';
+  const destination = destinationFor(style, use);
 
   const payload = {
     // When the visitor leaves the name blank, invent one that fits the style.
@@ -477,8 +504,8 @@ app.post('/api/mam/characters', mamRoute(async req => {
 
   // Creation is an AI pipeline that runs for minutes, so the remote answers
   // 202 + a jobId and we hand that back for the browser to poll.
-  const result = await mam(req, 'POST', '/api/external/create-character', payload);
-  const done = characterFromJob(result);
+  const result = await mam(req, 'POST', '/api/external/create-character', payload, destination);
+  const done = characterFromJob(result, destination);
   if (done) return done;
 
   const jobId = String(result.jobId || '');
@@ -486,13 +513,18 @@ app.post('/api/mam/characters', mamRoute(async req => {
     console.error('create-character returned neither chatId nor jobId:', JSON.stringify(result).slice(0, 1000));
     throw new Error('No character was created (the API returned no chatId).');
   }
-  return { jobId, status: result.status || 'pending' };
+  return {
+    jobId: encodeJobId(jobId, destination),
+    status: result.status || 'pending',
+    destination: destination.key,
+    siteName: destination.name,
+  };
 }));
 
 // Poll a character-creation job. `pending` means keep asking.
 app.get('/api/mam/characters/job/:jobId', mamRoute(async req => {
-  const jobId = encodeURIComponent(req.params.jobId);
-  const job = await mam(req, 'GET', `/api/external/create-character/job/${jobId}`);
+  const { destination, jobId } = decodeJobId(req.params.jobId);
+  const job = await mam(req, 'GET', `/api/external/create-character/job/${encodeURIComponent(jobId)}`, undefined, destination);
 
   if (job.status === 'failed') {
     const err = new Error(job.error || 'The character could not be created.');
@@ -501,22 +533,33 @@ app.get('/api/mam/characters/job/:jobId', mamRoute(async req => {
   }
 
   // The visuals may still be generating; the character itself is already usable.
-  const done = characterFromJob(job);
-  return done || { jobId: req.params.jobId, status: job.status || 'pending' };
+  const done = characterFromJob(job, destination);
+  return done || { jobId: req.params.jobId, status: job.status || 'pending', destination: destination.key };
 }));
 
 // A completed job (or a legacy synchronous reply) carries chatId + slug.
-function characterFromJob(body) {
+function characterFromJob(body, destination) {
   const chatId = String(body.chatId || body.character?._id || '');
   if (!chatId) return null;
   const slug = body.slug || '';
-  return { chatId, slug, status: 'completed', url: characterUrl(chatId, slug) };
+  const dest = destination || DESTINATIONS.mymodelmanager;
+  return {
+    chatId,
+    slug,
+    status: 'completed',
+    url: characterUrl(chatId, slug, dest),
+    destination: dest.key,
+    siteName: dest.name,
+  };
 }
 
 // Attach selected Civit.ai media to a character, one call per item so a
 // single bad URL never strands the rest of the batch.
 app.post('/api/mam/characters/:chatId/media', mamRoute(async req => {
   const { chatId } = req.params;
+  // Attach to whichever site the character was created on; the client echoes
+  // the destination from the create reply.
+  const destination = DESTINATIONS[req.body?.destination] || DESTINATIONS.mymodelmanager;
   const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : [];
   if (!items.length) {
     const err = new Error('Nothing selected to send.');
@@ -537,7 +580,7 @@ app.post('/api/mam/characters/:chatId/media', mamRoute(async req => {
       [isVideo ? 'videoUrl' : 'imageUrl']: item.url,
     };
     try {
-      await mam(req, 'POST', `/api/external/character/${chatId}/${endpoint}`, body);
+      await mam(req, 'POST', `/api/external/character/${chatId}/${endpoint}`, body, destination);
       added.push(item.url);
     } catch (err) {
       failed.push({ url: item.url, error: err.message });
@@ -547,8 +590,9 @@ app.post('/api/mam/characters/:chatId/media', mamRoute(async req => {
   return { added: added.length, failed, total: items.length };
 }));
 
-function characterUrl(chatId, slug) {
-  return slug ? `${BRAND.url}/character/${slug}` : `${BRAND.url}/chat/${chatId}`;
+function characterUrl(chatId, slug, destination) {
+  const base = (destination || DESTINATIONS.mymodelmanager).url;
+  return slug ? `${base}/character/${slug}` : `${base}/chat/${chatId}`;
 }
 
 app.listen(PORT, () => {
